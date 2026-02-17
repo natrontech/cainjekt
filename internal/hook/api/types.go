@@ -32,6 +32,12 @@ type Processor interface {
 	Apply(*Context) error
 }
 
+// LanguageProcessor extends Processor with wrapper-runtime handling.
+type LanguageProcessor interface {
+	Processor
+	ApplyWrapper(*WrapperContext) error
+}
+
 type ProcessorResult struct {
 	Name    string
 	Stage   Stage
@@ -81,4 +87,9 @@ type Context struct {
 
 func (c *Context) AddResult(r ProcessorResult) {
 	c.Results = append(c.Results, r)
+}
+
+type WrapperContext struct {
+	Env        []string
+	TrustStore string
 }

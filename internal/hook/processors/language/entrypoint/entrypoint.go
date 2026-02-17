@@ -38,6 +38,11 @@ func (p *processor) Apply(ctx *hookapi.Context) error {
 	return nil
 }
 
+func (p *processor) ApplyWrapper(_ *hookapi.WrapperContext) error {
+	// Entrypoint rewrites OCI args/env in hook phase; nothing to do in wrapper runtime.
+	return nil
+}
+
 func setEnvDefault(ctx *hookapi.Context, key, value string) {
 	if ctx.Spec.Process == nil {
 		return

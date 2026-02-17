@@ -8,18 +8,27 @@ import (
 	"syscall"
 
 	"github.com/tsuzu/cainjekt/internal/config"
+	hookapi "github.com/tsuzu/cainjekt/internal/hook/api"
+	"github.com/tsuzu/cainjekt/internal/hook/processors"
 )
 
 func Run() error {
 	if len(os.Args) < 2 {
 		return fmt.Errorf("wrapper requires original command in argv[1:]")
 	}
-	trustStore := strings.TrimSpace(os.Getenv(config.EnvWrapperTrustStore))
-	env := os.Environ()
-	if trustStore != "" {
-		env = setDefault(env, "SSL_CERT_FILE", trustStore)
-		env = setDefault(env, "NODE_EXTRA_CA_CERTS", trustStore)
-		env = setDefault(env, "REQUESTS_CA_BUNDLE", trustStore)
+
+	wctx := &hookapi.WrapperContext{
+		Env:        os.Environ(),
+		TrustStore: strings.TrimSpace(os.Getenv(config.EnvWrapperTrustStore)),
+	}
+	for _, p := range processors.ForStage(processors.Default(), hookapi.StageLanguage) {
+		lp, ok := p.(hookapi.LanguageProcessor)
+		if !ok {
+			continue
+		}
+		if err := lp.ApplyWrapper(wctx); err != nil {
+			return fmt.Errorf("wrapper language processor %q failed: %w", lp.Name(), err)
+		}
 	}
 
 	argv0 := os.Args[1]
@@ -31,18 +40,8 @@ func Run() error {
 		argv0 = resolved
 	}
 
-	if err := syscall.Exec(argv0, os.Args[1:], env); err != nil {
+	if err := syscall.Exec(argv0, os.Args[1:], wctx.Env); err != nil {
 		return fmt.Errorf("exec failed: %w", err)
 	}
 	return nil
-}
-
-func setDefault(env []string, key, value string) []string {
-	prefix := key + "="
-	for _, v := range env {
-		if strings.HasPrefix(v, prefix) {
-			return env
-		}
-	}
-	return append(env, prefix+value)
 }
