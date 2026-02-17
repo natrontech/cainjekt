@@ -591,8 +591,29 @@ CMD ["sh", "-c", "sleep 600"]
 	t.Cleanup(func() {
 		_ = tryCmd(30*time.Second, "docker", "rmi", tag)
 	})
-	runCmd(t, 2*time.Minute, "kind", "load", "docker-image", "--name", clusterName, tag)
+	if out, err := runCmdWithInput(2*time.Minute, "", "kind", "load", "docker-image", "--name", clusterName, tag); err != nil {
+		t.Logf("kind load docker-image failed, falling back to ctr import: %v\n%s", err, out)
+		importImageViaCtr(t, clusterName, tag)
+	}
 	return tag
+}
+
+func importImageViaCtr(t *testing.T, clusterName, tag string) {
+	t.Helper()
+	nodesRaw := runCmd(t, 30*time.Second, "kind", "get", "nodes", "--name="+clusterName)
+	nodes := strings.Fields(nodesRaw)
+	if len(nodes) == 0 {
+		t.Fatalf("no kind nodes found for cluster %q", clusterName)
+	}
+
+	tarPath := filepath.Join(t.TempDir(), "image.tar")
+	runCmd(t, 2*time.Minute, "docker", "save", "-o", tarPath, tag)
+
+	for _, node := range nodes {
+		runCmd(t, 30*time.Second, "docker", "cp", tarPath, node+":/tmp/cainjekt-image.tar")
+		runCmd(t, 2*time.Minute, "docker", "exec", node, "ctr", "-n", "k8s.io", "images", "import", "/tmp/cainjekt-image.tar")
+		runCmd(t, 30*time.Second, "docker", "exec", node, "rm", "-f", "/tmp/cainjekt-image.tar")
+	}
 }
 
 func waitForDefaultServiceAccount(t *testing.T, namespace string) {
