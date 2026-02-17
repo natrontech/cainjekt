@@ -606,13 +606,9 @@ func importImageViaCtr(t *testing.T, clusterName, tag string) {
 		t.Fatalf("no kind nodes found for cluster %q", clusterName)
 	}
 
-	tarPath := filepath.Join(t.TempDir(), "image.tar")
-	runCmd(t, 2*time.Minute, "docker", "save", "-o", tarPath, tag)
-
 	for _, node := range nodes {
-		runCmd(t, 30*time.Second, "docker", "cp", tarPath, node+":/tmp/cainjekt-image.tar")
-		runCmd(t, 2*time.Minute, "docker", "exec", node, "ctr", "-n", "k8s.io", "images", "import", "/tmp/cainjekt-image.tar")
-		runCmd(t, 30*time.Second, "docker", "exec", node, "rm", "-f", "/tmp/cainjekt-image.tar")
+		runCmd(t, 3*time.Minute, "bash", "-lc",
+			fmt.Sprintf("docker save %s | docker exec -i %s ctr -n k8s.io images import -", tag, node))
 	}
 }
 
