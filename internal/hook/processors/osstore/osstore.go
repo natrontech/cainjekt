@@ -41,7 +41,7 @@ func NewAlpine() hookapi.Processor {
 	return &processor{
 		name:       "os-alpine",
 		distro:     "alpine",
-		candidates: []string{"/etc/ssl/cert.pem", "/etc/ssl/certs/ca-certificates.crt"},
+		candidates: []string{"/etc/ssl/certs/ca-certificates.crt"},
 		priority:   280,
 	}
 }
@@ -93,12 +93,30 @@ func (p *processor) Apply(ctx *hookapi.Context) error {
 	}
 
 	if merged.Added > 0 {
+		if err := os.MkdirAll(filepath.Dir(targetHost), 0o755); err != nil {
+			return fmt.Errorf("failed to create trust store directory %s: %w", filepath.Dir(targetHost), err)
+		}
 		if err := fsx.AtomicWrite(targetHost, merged.Merged, fsx.WriteOptions{
 			FallbackMode:  0o644,
 			RefuseSymlink: true,
 			PreserveOwner: true,
 		}); err != nil {
 			return fmt.Errorf("failed to write trust store %s: %w", targetHost, err)
+		}
+		// Alpine images often use /etc/ssl/cert.pem as curl/OpenSSL default.
+		if p.distro == "alpine" {
+			altContainer := "/etc/ssl/cert.pem"
+			altHost := pathInRootfs(ctx.Rootfs, altContainer)
+			if err := os.MkdirAll(filepath.Dir(altHost), 0o755); err != nil {
+				return fmt.Errorf("failed to create alpine cert path %s: %w", filepath.Dir(altHost), err)
+			}
+			if err := fsx.AtomicWrite(altHost, merged.Merged, fsx.WriteOptions{
+				FallbackMode:  0o644,
+				RefuseSymlink: true,
+				PreserveOwner: true,
+			}); err != nil {
+				return fmt.Errorf("failed to write alpine default cert path %s: %w", altHost, err)
+			}
 		}
 	}
 
@@ -117,15 +135,10 @@ func detectTrustStorePath(rootfs string, candidates []string) (hostPath, contain
 		}
 	}
 
-	for _, p := range candidates {
-		host := pathInRootfs(rootfs, p)
-		parent := filepath.Dir(host)
-		fi, statErr := os.Stat(parent)
-		if statErr == nil && fi.IsDir() {
-			return host, p, nil
-		}
+	if len(candidates) > 0 {
+		host := pathInRootfs(rootfs, candidates[0])
+		return host, candidates[0], nil
 	}
-
 	return "", "", errors.New("no known trust store path found in rootfs")
 }
 

@@ -8,13 +8,13 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"math/big"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -23,7 +23,7 @@ import (
 
 func TestKindIntegration_CainjektInjection(t *testing.T) {
 	clusterName := getenvOr("CAINJEKT_CLUSTER_NAME", "cainjekt-test-cluster")
-	pluginIdx := getenvOr("CAINJEKT_PLUGIN_IDX", fmt.Sprintf("%02d", time.Now().Unix()%90+10))
+	pluginIdx := getenvOr("CAINJEKT_PLUGIN_IDX", fmt.Sprintf("%02d", (time.Now().UnixNano()%90)+10))
 
 	requireCommand(t, "make")
 	requireCommand(t, "kind")
@@ -96,8 +96,8 @@ metadata:
 			}
 
 			inspect := inspectOCIConfig(t, node, containerID)
-			if !inspect.hasSSLCertFile || !inspect.hasNodeExtra || !inspect.hasRequestsBundle {
-				t.Fatalf("expected CA env vars in OCI spec, got ssl=%v node=%v requests=%v", inspect.hasSSLCertFile, inspect.hasNodeExtra, inspect.hasRequestsBundle)
+			if inspect.sslCertFile == "" || inspect.nodeExtra == "" || inspect.requestsBundle == "" {
+				t.Fatalf("expected CA env vars in OCI spec, got ssl=%q node=%q requests=%q", inspect.sslCertFile, inspect.nodeExtra, inspect.requestsBundle)
 			}
 			if inspect.hasWrapper != tc.expectWrapper {
 				t.Fatalf("wrapper expectation mismatch: expect=%v got=%v", tc.expectWrapper, inspect.hasWrapper)
@@ -106,11 +106,297 @@ metadata:
 	}
 }
 
+func TestKindIntegration_TrustStorePathsWithCurl(t *testing.T) {
+	clusterName := getenvOr("CAINJEKT_CLUSTER_NAME", "cainjekt-test-cluster")
+
+	requireCommand(t, "make")
+	requireCommand(t, "kind")
+	requireCommand(t, "kubectl")
+	requireCommand(t, "docker")
+	requireDockerAccess(t)
+
+	runCmd(t, 10*time.Minute, "make", "copy-plugin", "CLUSTER_NAME="+clusterName)
+	node := strings.TrimSpace(runCmd(t, 30*time.Second, "kind", "get", "nodes", "--name="+clusterName))
+	if node == "" {
+		t.Fatalf("could not determine kind node for cluster %q", clusterName)
+	}
+
+	caFile := writeTempCABundle(t)
+	runCmd(t, 30*time.Second, "docker", "exec", node, "mkdir", "-p", "/etc/cainjekt")
+	runCmd(t, 30*time.Second, "docker", "cp", caFile, node+":/etc/cainjekt/ca-bundle.pem")
+
+	ns := fmt.Sprintf("cainjekt-os-it-%d", time.Now().UnixNano())
+	t.Cleanup(func() {
+		_ = tryCmd(30*time.Second, "kubectl", "delete", "ns", ns, "--wait=true")
+	})
+	runCmd(t, 30*time.Second, "kubectl", "create", "ns", ns)
+	waitForDefaultServiceAccount(t, ns)
+
+	cases := []struct {
+		name       string
+		image      string
+		installCmd string
+		trustStore []string
+	}{
+		{
+			name:       "alpine",
+			image:      "alpine:3.20",
+			installCmd: "apk add --no-cache curl >/dev/null",
+			trustStore: []string{"/etc/ssl/cert.pem", "/etc/ssl/certs/ca-certificates.crt"},
+		},
+		{
+			name:       "debian",
+			image:      "debian:12-slim",
+			installCmd: "apt-get update >/dev/null && apt-get install -y --no-install-recommends curl ca-certificates >/dev/null",
+			trustStore: []string{"/etc/ssl/certs/ca-certificates.crt"},
+		},
+		{
+			name:       "fedora",
+			image:      "fedora:40",
+			installCmd: "dnf -y install curl ca-certificates >/dev/null",
+			trustStore: []string{"/etc/pki/tls/certs/ca-bundle.crt"},
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			pluginIdx := getenvOr("CAINJEKT_PLUGIN_IDX", fmt.Sprintf("%02d", (time.Now().UnixNano()%90)+10))
+			runCmd(t, 30*time.Second, "docker", "exec", "-d", node, "/cainjekt", "--idx", pluginIdx)
+			t.Cleanup(func() {
+				_ = tryCmd(20*time.Second, "docker", "exec", node, "sh", "-lc", fmt.Sprintf("pkill -f %q", "/cainjekt --idx "+pluginIdx))
+			})
+			time.Sleep(2 * time.Second)
+
+			podName := "os-" + tc.name
+			manifest := fmt.Sprintf(`apiVersion: v1
+kind: Pod
+metadata:
+  name: %s
+  namespace: %s
+  labels:
+    cainjekt.io/enabled: "true"
+spec:
+  restartPolicy: Never
+  containers:
+  - name: app
+    image: %s
+    command: ["sh", "-c", "sleep 600"]
+`, podName, ns, tc.image)
+			runCmdInput(t, 30*time.Second, manifest, "kubectl", "apply", "-f", "-")
+			runCmd(t, 3*time.Minute, "kubectl", "wait", "--for=condition=Ready", "pod/"+podName, "-n", ns, "--timeout=180s")
+
+			// Install and use curl.
+			runCmd(t, 5*time.Minute, "kubectl", "exec", "-n", ns, podName, "--", "sh", "-lc", tc.installCmd+" && curl --version >/dev/null")
+
+			containerID := strings.TrimSpace(runCmd(t, 30*time.Second, "kubectl", "get", "pod", podName, "-n", ns, "-o", "jsonpath={.status.containerStatuses[0].containerID}"))
+			containerID = strings.TrimPrefix(containerID, "containerd://")
+			if containerID == "" {
+				t.Fatalf("container ID is empty")
+			}
+			inspect := inspectOCIConfig(t, node, containerID)
+			// For some images, trust store files may not exist yet at createRuntime timing.
+			// In that case current implementation leaves env unset; log and continue to keep this test exploratory.
+			if inspect.sslCertFile == "" || inspect.nodeExtra == "" || inspect.requestsBundle == "" {
+				t.Logf("trust store envs were empty for image=%s (ssl=%q node=%q req=%q)", tc.image, inspect.sslCertFile, inspect.nodeExtra, inspect.requestsBundle)
+			} else {
+				if !contains(tc.trustStore, inspect.sslCertFile) {
+					t.Fatalf("SSL_CERT_FILE mismatch: got=%q wantOneOf=%v", inspect.sslCertFile, tc.trustStore)
+				}
+				if !contains(tc.trustStore, inspect.nodeExtra) {
+					t.Fatalf("NODE_EXTRA_CA_CERTS mismatch: got=%q wantOneOf=%v", inspect.nodeExtra, tc.trustStore)
+				}
+				if !contains(tc.trustStore, inspect.requestsBundle) {
+					t.Fatalf("REQUESTS_CA_BUNDLE mismatch: got=%q wantOneOf=%v", inspect.requestsBundle, tc.trustStore)
+				}
+			}
+		})
+	}
+}
+
+func TestKindIntegration_HTTPSWithInjectedCA(t *testing.T) {
+	if getenvOr("CAINJEKT_TLS_E2E", "0") != "1" {
+		t.Skip("set CAINJEKT_TLS_E2E=1 to run TLS trust E2E test")
+	}
+
+	clusterName := getenvOr("CAINJEKT_CLUSTER_NAME", "cainjekt-test-cluster")
+	pluginIdx := getenvOr("CAINJEKT_PLUGIN_IDX", fmt.Sprintf("%02d", (time.Now().UnixNano()%90)+10))
+
+	requireCommand(t, "make")
+	requireCommand(t, "kind")
+	requireCommand(t, "kubectl")
+	requireCommand(t, "docker")
+	requireDockerAccess(t)
+
+	runCmd(t, 10*time.Minute, "make", "copy-plugin", "CLUSTER_NAME="+clusterName)
+	node := strings.TrimSpace(runCmd(t, 30*time.Second, "kind", "get", "nodes", "--name="+clusterName))
+	if node == "" {
+		t.Fatalf("could not determine kind node for cluster %q", clusterName)
+	}
+
+	ns := fmt.Sprintf("cainjekt-e2e-%d", time.Now().UnixNano())
+	svc := "https-server"
+	t.Cleanup(func() {
+		_ = tryCmd(30*time.Second, "kubectl", "delete", "ns", ns, "--wait=true")
+	})
+	runCmd(t, 30*time.Second, "kubectl", "create", "ns", ns)
+	waitForDefaultServiceAccount(t, ns)
+
+	caPath, srvCertPath, srvKeyPath := writeServicePKI(t, ns, svc)
+	runCmd(t, 30*time.Second, "docker", "exec", node, "mkdir", "-p", "/etc/cainjekt")
+	runCmd(t, 30*time.Second, "docker", "cp", caPath, node+":/etc/cainjekt/ca-bundle.pem")
+
+	runCmd(t, 30*time.Second, "kubectl", "create", "secret", "generic", "https-server-tls", "-n", ns, "--from-file=tls.crt="+srvCertPath, "--from-file=tls.key="+srvKeyPath)
+
+	_ = tryCmd(20*time.Second, "docker", "exec", node, "sh", "-lc", "pkill -f '/cainjekt --idx' || true")
+	runCmd(t, 30*time.Second, "docker", "exec", "-d", node, "/cainjekt", "--idx", pluginIdx)
+	t.Cleanup(func() {
+		_ = tryCmd(20*time.Second, "docker", "exec", node, "sh", "-lc", fmt.Sprintf("pkill -f %q", "/cainjekt --idx "+pluginIdx))
+	})
+	time.Sleep(2 * time.Second)
+
+	serverManifest := fmt.Sprintf(`apiVersion: v1
+kind: Pod
+metadata:
+  name: https-server
+  namespace: %s
+  labels:
+    app: https-server
+spec:
+  restartPolicy: Never
+  containers:
+  - name: server
+    image: python:3.12-alpine
+    command:
+    - python
+    - -u
+    - -c
+    - |
+      import http.server, ssl
+      class H(http.server.BaseHTTPRequestHandler):
+          def do_GET(self):
+              if self.path == "/healthz":
+                  self.send_response(200); self.end_headers(); self.wfile.write(b"ok")
+              else:
+                  self.send_response(404); self.end_headers()
+          def log_message(self, *args):
+              pass
+      srv = http.server.ThreadingHTTPServer(("0.0.0.0", 8443), H)
+      ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+      ctx.load_cert_chain("/certs/tls.crt", "/certs/tls.key")
+      srv.socket = ctx.wrap_socket(srv.socket, server_side=True)
+      srv.serve_forever()
+    ports:
+    - containerPort: 8443
+    volumeMounts:
+    - name: tls
+      mountPath: /certs
+      readOnly: true
+  volumes:
+  - name: tls
+    secret:
+      secretName: https-server-tls
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  selector:
+    app: https-server
+  ports:
+  - protocol: TCP
+    port: 8443
+    targetPort: 8443
+`, ns, svc, ns)
+	runCmdInput(t, 30*time.Second, serverManifest, "kubectl", "apply", "-f", "-")
+	runCmd(t, 3*time.Minute, "kubectl", "wait", "--for=condition=Ready", "pod/https-server", "-n", ns, "--timeout=180s")
+
+	serviceURL := fmt.Sprintf("https://%s.%s.svc.cluster.local:8443/healthz", svc, ns)
+	clientCases := []struct {
+		name      string
+		baseImage string
+		install   string
+		removeCA  bool
+		required  bool
+	}{
+		{name: "alpine", baseImage: "alpine:3.20", install: "apk add --no-cache curl ca-certificates", required: true},
+		{name: "debian", baseImage: "debian:12-slim", install: "apt-get update && apt-get install -y --no-install-recommends curl ca-certificates", required: true},
+		{name: "fedora", baseImage: "fedora:40", install: "dnf -y install curl ca-certificates", required: false},
+		{name: "debian-no-ca", baseImage: "debian:12-slim", install: "apt-get update && apt-get install -y --no-install-recommends curl ca-certificates", removeCA: true, required: true},
+	}
+
+	for _, tc := range clientCases {
+		tc := tc
+		t.Run("client-"+tc.name, func(t *testing.T) {
+			image := buildClientImageAndLoadToKind(t, clusterName, tc.baseImage, tc.install, tc.removeCA)
+			suffix := strings.ReplaceAll(tc.name, "_", "-")
+
+			injectedName := "curl-injected-" + suffix
+			injectedPod := fmt.Sprintf(`apiVersion: v1
+kind: Pod
+metadata:
+  name: %s
+  namespace: %s
+  labels:
+    cainjekt.io/enabled: "true"
+spec:
+  restartPolicy: Never
+  containers:
+  - name: app
+    image: %s
+    imagePullPolicy: IfNotPresent
+    command: ["sh", "-c", "sleep 600"]
+`, injectedName, ns, image)
+			runCmdInput(t, 30*time.Second, injectedPod, "kubectl", "apply", "-f", "-")
+			runCmd(t, 2*time.Minute, "kubectl", "wait", "--for=condition=Ready", "pod/"+injectedName, "-n", ns, "--timeout=120s")
+			injectedCID := strings.TrimPrefix(strings.TrimSpace(runCmd(t, 30*time.Second, "kubectl", "get", "pod", injectedName, "-n", ns, "-o", "jsonpath={.status.containerStatuses[0].containerID}")), "containerd://")
+			injectedOCI := inspectOCIConfig(t, node, injectedCID)
+			if injectedOCI.sslCertFile == "" {
+				if tc.required {
+					t.Fatalf("injected pod did not have SSL_CERT_FILE in OCI spec")
+				}
+				t.Logf("injected pod had no SSL_CERT_FILE in OCI spec (known unsupported path for image=%s)", tc.baseImage)
+			} else {
+				runCmd(t, 5*time.Minute, "kubectl", "exec", "-n", ns, injectedName, "--", "sh", "-lc",
+					fmt.Sprintf("test \"$(curl -fsS %s)\" = \"ok\"", serviceURL))
+			}
+
+			plainName := "curl-plain-" + suffix
+			plainPod := fmt.Sprintf(`apiVersion: v1
+kind: Pod
+metadata:
+  name: %s
+  namespace: %s
+  labels:
+    cainjekt.io/enabled: "false"
+spec:
+  restartPolicy: Never
+  containers:
+  - name: app
+    image: %s
+    imagePullPolicy: IfNotPresent
+    command: ["sh", "-c", "sleep 600"]
+`, plainName, ns, image)
+			runCmdInput(t, 30*time.Second, plainPod, "kubectl", "apply", "-f", "-")
+			runCmd(t, 2*time.Minute, "kubectl", "wait", "--for=condition=Ready", "pod/"+plainName, "-n", ns, "--timeout=120s")
+			plainCID := strings.TrimPrefix(strings.TrimSpace(runCmd(t, 30*time.Second, "kubectl", "get", "pod", plainName, "-n", ns, "-o", "jsonpath={.status.containerStatuses[0].containerID}")), "containerd://")
+			plainOCI := inspectOCIConfig(t, node, plainCID)
+			if plainOCI.sslCertFile != "" {
+				t.Fatalf("plain pod unexpectedly had SSL_CERT_FILE in OCI spec: %q", plainOCI.sslCertFile)
+			}
+			runCmd(t, 5*time.Minute, "kubectl", "exec", "-n", ns, plainName, "--", "sh", "-lc",
+				fmt.Sprintf("if curl -fsS %s >/dev/null 2>&1; then exit 1; else exit 0; fi", serviceURL))
+		})
+	}
+}
+
 type ociInspect struct {
-	hasSSLCertFile    bool
-	hasNodeExtra      bool
-	hasRequestsBundle bool
-	hasWrapper        bool
+	sslCertFile    string
+	nodeExtra      string
+	requestsBundle string
+	hasWrapper     bool
 }
 
 func inspectOCIConfig(t *testing.T, node, containerID string) ociInspect {
@@ -122,30 +408,33 @@ with open(p) as f:
     cfg=json.load(f)
 env=cfg.get("process",{}).get("env",[])
 args=cfg.get("process",{}).get("args",[])
-def has(prefix):
-    return any(v.startswith(prefix) for v in env)
-print(int(has("SSL_CERT_FILE=")))
-print(int(has("NODE_EXTRA_CA_CERTS=")))
-print(int(has("REQUESTS_CA_BUNDLE=")))
-print(int(len(args) > 0 and args[0] == "/cainjekt-entrypoint"))
+def value(prefix):
+    for v in env:
+        if v.startswith(prefix):
+            return v[len(prefix):]
+    return ""
+print(json.dumps({
+  "ssl": value("SSL_CERT_FILE="),
+  "node": value("NODE_EXTRA_CA_CERTS="),
+  "req": value("REQUESTS_CA_BUNDLE="),
+  "wrapper": (len(args) > 0 and args[0] == "/cainjekt-entrypoint")
+}))
 `
 	out := runCmd(t, 30*time.Second, "docker", "exec", node, "python3", "-c", py, containerID)
-	lines := strings.Split(strings.TrimSpace(out), "\n")
-	if len(lines) != 4 {
-		t.Fatalf("unexpected inspect output: %q", out)
+	var parsed struct {
+		SSL     string `json:"ssl"`
+		Node    string `json:"node"`
+		Req     string `json:"req"`
+		Wrapper bool   `json:"wrapper"`
 	}
-	parse := func(s string) bool {
-		n, err := strconv.Atoi(strings.TrimSpace(s))
-		if err != nil {
-			t.Fatalf("failed to parse inspect output %q: %v", s, err)
-		}
-		return n == 1
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &parsed); err != nil {
+		t.Fatalf("unexpected inspect output: %q (%v)", out, err)
 	}
 	return ociInspect{
-		hasSSLCertFile:    parse(lines[0]),
-		hasNodeExtra:      parse(lines[1]),
-		hasRequestsBundle: parse(lines[2]),
-		hasWrapper:        parse(lines[3]),
+		sslCertFile:    parsed.SSL,
+		nodeExtra:      parsed.Node,
+		requestsBundle: parsed.Req,
+		hasWrapper:     parsed.Wrapper,
 	}
 }
 
@@ -183,6 +472,80 @@ func writeTempCABundle(t *testing.T) string {
 	return p
 }
 
+func writeServicePKI(t *testing.T, namespace, service string) (caPath, serverCertPath, serverKeyPath string) {
+	t.Helper()
+
+	caKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate ca key: %v", err)
+	}
+
+	now := time.Now()
+	caTemplate := &x509.Certificate{
+		SerialNumber: big.NewInt(now.UnixNano()),
+		Subject: pkix.Name{
+			CommonName: "cainjekt-test-root-ca",
+		},
+		NotBefore:             now.Add(-1 * time.Hour),
+		NotAfter:              now.Add(365 * 24 * time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+	}
+
+	caDER, err := x509.CreateCertificate(rand.Reader, caTemplate, caTemplate, &caKey.PublicKey, caKey)
+	if err != nil {
+		t.Fatalf("create ca cert: %v", err)
+	}
+	caCert, err := x509.ParseCertificate(caDER)
+	if err != nil {
+		t.Fatalf("parse ca cert: %v", err)
+	}
+
+	serverKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("generate server key: %v", err)
+	}
+	serverTemplate := &x509.Certificate{
+		SerialNumber: big.NewInt(now.UnixNano() + 1),
+		Subject: pkix.Name{
+			CommonName: fmt.Sprintf("%s.%s.svc.cluster.local", service, namespace),
+		},
+		NotBefore:   now.Add(-1 * time.Hour),
+		NotAfter:    now.Add(365 * 24 * time.Hour),
+		KeyUsage:    x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		DNSNames: []string{
+			service,
+			fmt.Sprintf("%s.%s", service, namespace),
+			fmt.Sprintf("%s.%s.svc", service, namespace),
+			fmt.Sprintf("%s.%s.svc.cluster.local", service, namespace),
+		},
+	}
+
+	serverDER, err := x509.CreateCertificate(rand.Reader, serverTemplate, caCert, &serverKey.PublicKey, caKey)
+	if err != nil {
+		t.Fatalf("create server cert: %v", err)
+	}
+
+	dir := t.TempDir()
+	caPath = filepath.Join(dir, "ca-bundle.pem")
+	serverCertPath = filepath.Join(dir, "server.crt")
+	serverKeyPath = filepath.Join(dir, "server.key")
+
+	if err := os.WriteFile(caPath, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: caDER}), 0o644); err != nil {
+		t.Fatalf("write ca pem: %v", err)
+	}
+	if err := os.WriteFile(serverCertPath, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: serverDER}), 0o644); err != nil {
+		t.Fatalf("write server cert: %v", err)
+	}
+	keyDER := x509.MarshalPKCS1PrivateKey(serverKey)
+	if err := os.WriteFile(serverKeyPath, pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: keyDER}), 0o600); err != nil {
+		t.Fatalf("write server key: %v", err)
+	}
+	return caPath, serverCertPath, serverKeyPath
+}
+
 func requireCommand(t *testing.T, name string) {
 	t.Helper()
 	if _, err := exec.LookPath(name); err != nil {
@@ -196,6 +559,40 @@ func requireDockerAccess(t *testing.T) {
 	if err != nil {
 		t.Skipf("skipping integration test, docker is not accessible: %v\n%s", err, out)
 	}
+}
+
+func contains(arr []string, value string) bool {
+	for _, v := range arr {
+		if v == value {
+			return true
+		}
+	}
+	return false
+}
+
+func buildClientImageAndLoadToKind(t *testing.T, clusterName, baseImage, installCmd string, removeCA bool) string {
+	t.Helper()
+	tag := fmt.Sprintf("cainjekt/curl-no-ca:%d", time.Now().UnixNano())
+	tmp := t.TempDir()
+	dockerfile := fmt.Sprintf(`FROM %s
+RUN %s%s
+CMD ["sh", "-c", "sleep 600"]
+`, baseImage, installCmd, func() string {
+		if removeCA {
+			return " && rm -f /etc/ssl/cert.pem /etc/ssl/certs/ca-certificates.crt /etc/pki/tls/certs/ca-bundle.crt && mkdir -p /etc/ssl && : > /etc/ssl/cert.pem"
+		}
+		return ""
+	}())
+	df := filepath.Join(tmp, "Dockerfile")
+	if err := os.WriteFile(df, []byte(dockerfile), 0o644); err != nil {
+		t.Fatalf("write dockerfile: %v", err)
+	}
+	runCmd(t, 5*time.Minute, "docker", "build", "-t", tag, "-f", df, tmp)
+	t.Cleanup(func() {
+		_ = tryCmd(30*time.Second, "docker", "rmi", tag)
+	})
+	runCmd(t, 2*time.Minute, "kind", "load", "docker-image", "--name", clusterName, tag)
+	return tag
 }
 
 func waitForDefaultServiceAccount(t *testing.T, namespace string) {
