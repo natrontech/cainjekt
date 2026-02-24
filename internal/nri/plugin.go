@@ -92,6 +92,9 @@ func (p *Plugin) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *ap
 	}
 
 	adjustment := &api.ContainerAdjustment{}
+	if args := ctr.GetArgs(); len(args) > 0 && args[0] != config.WrapperPath {
+		adjustment.UpdateArgs(append([]string{config.WrapperPath}, args...))
+	}
 	adjustment.AddMount(&api.Mount{
 		Destination: config.WrapperPath,
 		Type:        "bind",
