@@ -144,7 +144,7 @@ kind: Pod
 metadata:
   name: %s
   namespace: %s
-  labels:
+  annotations:
     cainjekt.io/enabled: "true"
 spec:
   restartPolicy: Never
@@ -165,7 +165,7 @@ kind: Pod
 metadata:
   name: %s
   namespace: %s
-  labels:
+  annotations:
     cainjekt.io/enabled: "false"
 spec:
   restartPolicy: Never
