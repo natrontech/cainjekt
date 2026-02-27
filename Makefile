@@ -3,7 +3,7 @@ CLUSTER_NAME ?= cainjekt-test-cluster
 .PHONY: build
 build:
 	mkdir -p bin
-	go build -o bin/cainjekt ./cmd/cainjekt
+	CGO_ENABLED=0 go build -o bin/cainjekt ./cmd/cainjekt
 
 .PHONY: prepare-test-cluster
 prepare-test-cluster:
