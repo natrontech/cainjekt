@@ -11,6 +11,14 @@ jobs:
     timeout-minutes: 45
 
     steps:
+      - name: Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+          args: --ssh
+
       - name: Checkout
         uses: actions/checkout@v4
 
