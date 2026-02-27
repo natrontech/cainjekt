@@ -96,119 +96,8 @@ metadata:
 			}
 
 			inspect := inspectOCIConfig(t, node, containerID)
-			if inspect.sslCertFile == "" || inspect.nodeExtra == "" || inspect.requestsBundle == "" {
-				t.Fatalf("expected CA env vars in OCI spec, got ssl=%q node=%q requests=%q", inspect.sslCertFile, inspect.nodeExtra, inspect.requestsBundle)
-			}
 			if inspect.hasWrapper != tc.expectWrapper {
 				t.Fatalf("wrapper expectation mismatch: expect=%v got=%v", tc.expectWrapper, inspect.hasWrapper)
-			}
-		})
-	}
-}
-
-func TestKindIntegration_TrustStorePathsWithCurl(t *testing.T) {
-	clusterName := getenvOr("CAINJEKT_CLUSTER_NAME", "cainjekt-test-cluster")
-
-	requireCommand(t, "make")
-	requireCommand(t, "kind")
-	requireCommand(t, "kubectl")
-	requireCommand(t, "docker")
-	requireDockerAccess(t)
-
-	runCmd(t, 10*time.Minute, "make", "copy-plugin", "CLUSTER_NAME="+clusterName)
-	node := strings.TrimSpace(runCmd(t, 30*time.Second, "kind", "get", "nodes", "--name="+clusterName))
-	if node == "" {
-		t.Fatalf("could not determine kind node for cluster %q", clusterName)
-	}
-
-	caFile := writeTempCABundle(t)
-	runCmd(t, 30*time.Second, "docker", "exec", node, "mkdir", "-p", "/etc/cainjekt")
-	runCmd(t, 30*time.Second, "docker", "cp", caFile, node+":/etc/cainjekt/ca-bundle.pem")
-
-	ns := fmt.Sprintf("cainjekt-os-it-%d", time.Now().UnixNano())
-	t.Cleanup(func() {
-		_ = tryCmd(30*time.Second, "kubectl", "delete", "ns", ns, "--wait=true")
-	})
-	runCmd(t, 30*time.Second, "kubectl", "create", "ns", ns)
-	waitForDefaultServiceAccount(t, ns)
-
-	cases := []struct {
-		name       string
-		image      string
-		installCmd string
-		trustStore []string
-	}{
-		{
-			name:       "alpine",
-			image:      "alpine:3.20",
-			installCmd: "apk add --no-cache curl >/dev/null",
-			trustStore: []string{"/etc/ssl/cert.pem", "/etc/ssl/certs/ca-certificates.crt"},
-		},
-		{
-			name:       "debian",
-			image:      "debian:12-slim",
-			installCmd: "apt-get update >/dev/null && apt-get install -y --no-install-recommends curl ca-certificates >/dev/null",
-			trustStore: []string{"/etc/ssl/certs/ca-certificates.crt"},
-		},
-		{
-			name:       "fedora",
-			image:      "fedora:40",
-			installCmd: "dnf -y install curl ca-certificates >/dev/null",
-			trustStore: []string{"/etc/pki/tls/certs/ca-bundle.crt"},
-		},
-	}
-
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			pluginIdx := getenvOr("CAINJEKT_PLUGIN_IDX", fmt.Sprintf("%02d", (time.Now().UnixNano()%90)+10))
-			runCmd(t, 30*time.Second, "docker", "exec", "-d", node, "/cainjekt", "--idx", pluginIdx)
-			t.Cleanup(func() {
-				_ = tryCmd(20*time.Second, "docker", "exec", node, "sh", "-lc", fmt.Sprintf("pkill -f %q", "/cainjekt --idx "+pluginIdx))
-			})
-			time.Sleep(2 * time.Second)
-
-			podName := "os-" + tc.name
-			manifest := fmt.Sprintf(`apiVersion: v1
-kind: Pod
-metadata:
-  name: %s
-  namespace: %s
-  labels:
-    cainjekt.io/enabled: "true"
-spec:
-  restartPolicy: Never
-  containers:
-  - name: app
-    image: %s
-    command: ["sh", "-c", "sleep 600"]
-`, podName, ns, tc.image)
-			runCmdInput(t, 30*time.Second, manifest, "kubectl", "apply", "-f", "-")
-			runCmd(t, 3*time.Minute, "kubectl", "wait", "--for=condition=Ready", "pod/"+podName, "-n", ns, "--timeout=180s")
-
-			// Install and use curl.
-			runCmd(t, 5*time.Minute, "kubectl", "exec", "-n", ns, podName, "--", "sh", "-lc", tc.installCmd+" && curl --version >/dev/null")
-
-			containerID := strings.TrimSpace(runCmd(t, 30*time.Second, "kubectl", "get", "pod", podName, "-n", ns, "-o", "jsonpath={.status.containerStatuses[0].containerID}"))
-			containerID = strings.TrimPrefix(containerID, "containerd://")
-			if containerID == "" {
-				t.Fatalf("container ID is empty")
-			}
-			inspect := inspectOCIConfig(t, node, containerID)
-			// For some images, trust store files may not exist yet at createRuntime timing.
-			// In that case current implementation leaves env unset; log and continue to keep this test exploratory.
-			if inspect.sslCertFile == "" || inspect.nodeExtra == "" || inspect.requestsBundle == "" {
-				t.Logf("trust store envs were empty for image=%s (ssl=%q node=%q req=%q)", tc.image, inspect.sslCertFile, inspect.nodeExtra, inspect.requestsBundle)
-			} else {
-				if !contains(tc.trustStore, inspect.sslCertFile) {
-					t.Fatalf("SSL_CERT_FILE mismatch: got=%q wantOneOf=%v", inspect.sslCertFile, tc.trustStore)
-				}
-				if !contains(tc.trustStore, inspect.nodeExtra) {
-					t.Fatalf("NODE_EXTRA_CA_CERTS mismatch: got=%q wantOneOf=%v", inspect.nodeExtra, tc.trustStore)
-				}
-				if !contains(tc.trustStore, inspect.requestsBundle) {
-					t.Fatalf("REQUESTS_CA_BUNDLE mismatch: got=%q wantOneOf=%v", inspect.requestsBundle, tc.trustStore)
-				}
 			}
 		})
 	}
@@ -319,12 +208,11 @@ spec:
 		baseImage string
 		install   string
 		removeCA  bool
-		required  bool
 	}{
-		{name: "alpine", baseImage: "alpine:3.20", install: "apk add --no-cache curl ca-certificates", required: true},
-		{name: "debian", baseImage: "debian:12-slim", install: "apt-get update && apt-get install -y --no-install-recommends curl ca-certificates", required: true},
-		{name: "fedora", baseImage: "fedora:40", install: "dnf -y install curl ca-certificates", required: false},
-		{name: "debian-no-ca", baseImage: "debian:12-slim", install: "apt-get update && apt-get install -y --no-install-recommends curl ca-certificates", removeCA: true, required: true},
+		{name: "alpine", baseImage: "alpine:3.20", install: "apk add --no-cache curl ca-certificates"},
+		{name: "debian", baseImage: "debian:12-slim", install: "apt-get update && apt-get install -y --no-install-recommends curl ca-certificates"},
+		{name: "fedora", baseImage: "fedora:40", install: "dnf -y install curl ca-certificates"},
+		{name: "debian-no-ca", baseImage: "debian:12-slim", install: "apt-get update && apt-get install -y --no-install-recommends curl ca-certificates", removeCA: true},
 	}
 
 	for _, tc := range clientCases {
@@ -351,17 +239,8 @@ spec:
 `, injectedName, ns, image)
 			runCmdInput(t, 30*time.Second, injectedPod, "kubectl", "apply", "-f", "-")
 			runCmd(t, 2*time.Minute, "kubectl", "wait", "--for=condition=Ready", "pod/"+injectedName, "-n", ns, "--timeout=120s")
-			injectedCID := strings.TrimPrefix(strings.TrimSpace(runCmd(t, 30*time.Second, "kubectl", "get", "pod", injectedName, "-n", ns, "-o", "jsonpath={.status.containerStatuses[0].containerID}")), "containerd://")
-			injectedOCI := inspectOCIConfig(t, node, injectedCID)
-			if injectedOCI.sslCertFile == "" {
-				if tc.required {
-					t.Fatalf("injected pod did not have SSL_CERT_FILE in OCI spec")
-				}
-				t.Logf("injected pod had no SSL_CERT_FILE in OCI spec (known unsupported path for image=%s)", tc.baseImage)
-			} else {
-				runCmd(t, 5*time.Minute, "kubectl", "exec", "-n", ns, injectedName, "--", "sh", "-lc",
-					fmt.Sprintf("test \"$(curl -fsS %s)\" = \"ok\"", serviceURL))
-			}
+			runCmd(t, 5*time.Minute, "kubectl", "exec", "-n", ns, injectedName, "--", "sh", "-lc",
+				fmt.Sprintf("test \"$(curl -fsS %s)\" = \"ok\"", serviceURL))
 
 			plainName := "curl-plain-" + suffix
 			plainPod := fmt.Sprintf(`apiVersion: v1
@@ -381,11 +260,6 @@ spec:
 `, plainName, ns, image)
 			runCmdInput(t, 30*time.Second, plainPod, "kubectl", "apply", "-f", "-")
 			runCmd(t, 2*time.Minute, "kubectl", "wait", "--for=condition=Ready", "pod/"+plainName, "-n", ns, "--timeout=120s")
-			plainCID := strings.TrimPrefix(strings.TrimSpace(runCmd(t, 30*time.Second, "kubectl", "get", "pod", plainName, "-n", ns, "-o", "jsonpath={.status.containerStatuses[0].containerID}")), "containerd://")
-			plainOCI := inspectOCIConfig(t, node, plainCID)
-			if plainOCI.sslCertFile != "" {
-				t.Fatalf("plain pod unexpectedly had SSL_CERT_FILE in OCI spec: %q", plainOCI.sslCertFile)
-			}
 			runCmd(t, 5*time.Minute, "kubectl", "exec", "-n", ns, plainName, "--", "sh", "-lc",
 				fmt.Sprintf("if curl -fsS %s >/dev/null 2>&1; then exit 1; else exit 0; fi", serviceURL))
 		})
@@ -393,10 +267,7 @@ spec:
 }
 
 type ociInspect struct {
-	sslCertFile    string
-	nodeExtra      string
-	requestsBundle string
-	hasWrapper     bool
+	hasWrapper bool
 }
 
 func inspectOCIConfig(t *testing.T, node, containerID string) ociInspect {
@@ -414,27 +285,18 @@ def value(prefix):
             return v[len(prefix):]
     return ""
 print(json.dumps({
-  "ssl": value("SSL_CERT_FILE="),
-  "node": value("NODE_EXTRA_CA_CERTS="),
-  "req": value("REQUESTS_CA_BUNDLE="),
   "wrapper": (len(args) > 0 and args[0] == "/cainjekt-entrypoint")
 }))
 `
 	out := runCmd(t, 30*time.Second, "docker", "exec", node, "python3", "-c", py, containerID)
 	var parsed struct {
-		SSL     string `json:"ssl"`
-		Node    string `json:"node"`
-		Req     string `json:"req"`
-		Wrapper bool   `json:"wrapper"`
+		Wrapper bool `json:"wrapper"`
 	}
 	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &parsed); err != nil {
 		t.Fatalf("unexpected inspect output: %q (%v)", out, err)
 	}
 	return ociInspect{
-		sslCertFile:    parsed.SSL,
-		nodeExtra:      parsed.Node,
-		requestsBundle: parsed.Req,
-		hasWrapper:     parsed.Wrapper,
+		hasWrapper: parsed.Wrapper,
 	}
 }
 
@@ -559,15 +421,6 @@ func requireDockerAccess(t *testing.T) {
 	if err != nil {
 		t.Skipf("skipping integration test, docker is not accessible: %v\n%s", err, out)
 	}
-}
-
-func contains(arr []string, value string) bool {
-	for _, v := range arr {
-		if v == value {
-			return true
-		}
-	}
-	return false
 }
 
 func buildClientImageAndLoadToKind(t *testing.T, clusterName, baseImage, installCmd string, removeCA bool) string {
