@@ -87,7 +87,7 @@ metadata:
 `, podName, ns, tc.annotationsYML)
 
 			runCmdInput(t, 30*time.Second, manifest, "kubectl", "apply", "-f", "-")
-			runCmd(t, 2*time.Minute, "kubectl", "wait", "--for=condition=Ready", "pod/"+podName, "-n", ns, "--timeout=120s")
+			waitForPodReady(t, 2*time.Minute, ns, podName, "120s")
 
 			containerID := strings.TrimSpace(runCmd(t, 30*time.Second, "kubectl", "get", "pod", podName, "-n", ns, "-o", "jsonpath={.status.containerStatuses[0].containerID}"))
 			containerID = strings.TrimPrefix(containerID, "containerd://")
@@ -200,7 +200,7 @@ spec:
     targetPort: 8443
 `, ns, svc, ns)
 	runCmdInput(t, 30*time.Second, serverManifest, "kubectl", "apply", "-f", "-")
-	runCmd(t, 3*time.Minute, "kubectl", "wait", "--for=condition=Ready", "pod/https-server", "-n", ns, "--timeout=180s")
+	waitForPodReady(t, 3*time.Minute, ns, "https-server", "180s")
 
 	serviceURL := fmt.Sprintf("https://%s.%s.svc.cluster.local:8443/healthz", svc, ns)
 	clientCases := []struct {
@@ -238,7 +238,7 @@ spec:
     command: ["sh", "-c", "sleep 600"]
 `, injectedName, ns, image)
 			runCmdInput(t, 30*time.Second, injectedPod, "kubectl", "apply", "-f", "-")
-			runCmd(t, 2*time.Minute, "kubectl", "wait", "--for=condition=Ready", "pod/"+injectedName, "-n", ns, "--timeout=120s")
+			waitForPodReady(t, 2*time.Minute, ns, injectedName, "120s")
 			runCmd(t, 5*time.Minute, "kubectl", "exec", "-n", ns, injectedName, "--", "sh", "-lc",
 				fmt.Sprintf("test \"$(curl -fsS %s)\" = \"ok\"", serviceURL))
 
@@ -259,7 +259,7 @@ spec:
     command: ["sh", "-c", "sleep 600"]
 `, plainName, ns, image)
 			runCmdInput(t, 30*time.Second, plainPod, "kubectl", "apply", "-f", "-")
-			runCmd(t, 2*time.Minute, "kubectl", "wait", "--for=condition=Ready", "pod/"+plainName, "-n", ns, "--timeout=120s")
+			waitForPodReady(t, 2*time.Minute, ns, plainName, "120s")
 			runCmd(t, 5*time.Minute, "kubectl", "exec", "-n", ns, plainName, "--", "sh", "-lc",
 				fmt.Sprintf("if curl -fsS %s >/dev/null 2>&1; then exit 1; else exit 0; fi", serviceURL))
 		})
@@ -478,6 +478,28 @@ func waitForDefaultServiceAccount(t *testing.T, namespace string) {
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
+}
+
+func waitForPodReady(t *testing.T, timeout time.Duration, namespace, podName, kubectlTimeout string) {
+	t.Helper()
+
+	args := []string{
+		"wait", "--for=condition=Ready", "pod/" + podName,
+		"-n", namespace,
+		"--timeout=" + kubectlTimeout,
+	}
+	out, err := runCmdWithInput(timeout, "", "kubectl", args...)
+	if err == nil {
+		return
+	}
+
+	describe, describeErr := runCmdWithInput(30*time.Second, "", "kubectl", "describe", "pod", podName, "-n", namespace)
+	if describeErr != nil {
+		describe = fmt.Sprintf("failed to describe pod: %v\noutput:\n%s", describeErr, describe)
+	}
+
+	t.Fatalf("command failed: kubectl %s\nerror: %v\noutput:\n%s\n\npod describe (%s/%s):\n%s",
+		strings.Join(args, " "), err, out, namespace, podName, describe)
 }
 
 func runCmd(t *testing.T, timeout time.Duration, name string, args ...string) string {
