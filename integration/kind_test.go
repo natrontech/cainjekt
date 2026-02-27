@@ -376,13 +376,45 @@ func waitForPodReady(t *testing.T, timeout time.Duration, namespace, podName, ku
 		return
 	}
 
+	includePodLogs := strings.Contains(err.Error(), "timeout after")
+	diagnostics := collectPodDiagnostics(t, namespace, podName, includePodLogs)
+
+	t.Fatalf("command failed: kubectl %s\nerror: %v\noutput:\n%s\n\n%s",
+		strings.Join(args, " "), err, out, diagnostics)
+}
+
+func collectPodDiagnostics(t *testing.T, namespace, podName string, includePodLogs bool) string {
+	t.Helper()
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "pod diagnostics (%s/%s):\n", namespace, podName)
+
 	describe, describeErr := runCmdWithInput(30*time.Second, "", "kubectl", "describe", "pod", podName, "-n", namespace)
 	if describeErr != nil {
-		describe = fmt.Sprintf("failed to describe pod: %v\noutput:\n%s", describeErr, describe)
+		fmt.Fprintf(&b, "[describe] failed: %v\noutput:\n%s\n", describeErr, describe)
+	} else {
+		fmt.Fprintf(&b, "[describe]\n%s\n", describe)
 	}
 
-	t.Fatalf("command failed: kubectl %s\nerror: %v\noutput:\n%s\n\npod describe (%s/%s):\n%s",
-		strings.Join(args, " "), err, out, namespace, podName, describe)
+	if !includePodLogs {
+		return b.String()
+	}
+
+	logs, logsErr := runCmdWithInput(30*time.Second, "", "kubectl", "logs", podName, "-n", namespace, "--all-containers=true")
+	if logsErr != nil {
+		fmt.Fprintf(&b, "[logs] failed: %v\noutput:\n%s\n", logsErr, logs)
+	} else {
+		fmt.Fprintf(&b, "[logs]\n%s\n", logs)
+	}
+
+	prevLogs, prevLogsErr := runCmdWithInput(30*time.Second, "", "kubectl", "logs", podName, "-n", namespace, "--all-containers=true", "--previous")
+	if prevLogsErr != nil {
+		fmt.Fprintf(&b, "[logs --previous] failed: %v\noutput:\n%s\n", prevLogsErr, prevLogs)
+	} else {
+		fmt.Fprintf(&b, "[logs --previous]\n%s\n", prevLogs)
+	}
+
+	return b.String()
 }
 
 func runCmd(t *testing.T, timeout time.Duration, name string, args ...string) string {
