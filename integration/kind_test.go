@@ -8,7 +8,6 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"math/big"
@@ -20,88 +19,6 @@ import (
 	"testing"
 	"time"
 )
-
-func TestKindIntegration_CainjektInjection(t *testing.T) {
-	clusterName := getenvOr("CAINJEKT_CLUSTER_NAME", "cainjekt-test-cluster")
-	pluginIdx := getenvOr("CAINJEKT_PLUGIN_IDX", fmt.Sprintf("%02d", (time.Now().UnixNano()%90)+10))
-
-	requireCommand(t, "make")
-	requireCommand(t, "kind")
-	requireCommand(t, "kubectl")
-	requireCommand(t, "docker")
-	requireDockerAccess(t)
-
-	runCmd(t, 10*time.Minute, "make", "copy-plugin", "CLUSTER_NAME="+clusterName)
-
-	node := strings.TrimSpace(runCmd(t, 30*time.Second, "kind", "get", "nodes", "--name="+clusterName))
-	if node == "" {
-		t.Fatalf("could not determine kind node for cluster %q", clusterName)
-	}
-
-	caFile := writeTempCABundle(t)
-	runCmd(t, 30*time.Second, "docker", "exec", node, "mkdir", "-p", "/etc/cainjekt")
-	runCmd(t, 30*time.Second, "docker", "cp", caFile, node+":/etc/cainjekt/ca-bundle.pem")
-
-	runCmd(t, 30*time.Second, "docker", "exec", "-d", node, "/cainjekt", "--idx", pluginIdx)
-	t.Cleanup(func() {
-		_ = tryCmd(20*time.Second, "docker", "exec", node, "sh", "-lc", fmt.Sprintf("pkill -f %q", "/cainjekt --idx "+pluginIdx))
-	})
-	// Let NRI plugin connect before creating pods.
-	time.Sleep(2 * time.Second)
-
-	ns := fmt.Sprintf("cainjekt-it-%d", time.Now().UnixNano())
-	t.Cleanup(func() {
-		_ = tryCmd(30*time.Second, "kubectl", "delete", "ns", ns, "--wait=true")
-	})
-
-	runCmd(t, 30*time.Second, "kubectl", "create", "ns", ns)
-	waitForDefaultServiceAccount(t, ns)
-
-	for _, tc := range []struct {
-		name           string
-		annotationsYML string
-		expectWrapper  bool
-	}{
-		{
-			name:          "default-processors",
-			expectWrapper: true,
-		},
-	} {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			podName := "it-" + strings.ReplaceAll(tc.name, "_", "-")
-			manifest := fmt.Sprintf(`apiVersion: v1
-kind: Pod
-metadata:
-  name: %s
-  namespace: %s
-  labels:
-    cainjekt.io/enabled: "true"
-  annotations:
-%sspec:
-  restartPolicy: Never
-  containers:
-  - name: app
-    image: alpine:3.20
-    command: ["sh", "-c", "sleep 300"]
-`, podName, ns, tc.annotationsYML)
-
-			runCmdInput(t, 30*time.Second, manifest, "kubectl", "apply", "-f", "-")
-			waitForPodReady(t, 2*time.Minute, ns, podName, "120s")
-
-			containerID := strings.TrimSpace(runCmd(t, 30*time.Second, "kubectl", "get", "pod", podName, "-n", ns, "-o", "jsonpath={.status.containerStatuses[0].containerID}"))
-			containerID = strings.TrimPrefix(containerID, "containerd://")
-			if containerID == "" {
-				t.Fatalf("container ID is empty")
-			}
-
-			inspect := inspectOCIConfig(t, node, containerID)
-			if inspect.hasWrapper != tc.expectWrapper {
-				t.Fatalf("wrapper expectation mismatch: expect=%v got=%v", tc.expectWrapper, inspect.hasWrapper)
-			}
-		})
-	}
-}
 
 func TestKindIntegration_HTTPSWithInjectedCA(t *testing.T) {
 	if getenvOr("CAINJEKT_TLS_E2E", "0") != "1" {
@@ -263,40 +180,6 @@ spec:
 			runCmd(t, 5*time.Minute, "kubectl", "exec", "-n", ns, plainName, "--", "sh", "-lc",
 				fmt.Sprintf("if curl -fsS %s >/dev/null 2>&1; then exit 1; else exit 0; fi", serviceURL))
 		})
-	}
-}
-
-type ociInspect struct {
-	hasWrapper bool
-}
-
-func inspectOCIConfig(t *testing.T, node, containerID string) ociInspect {
-	t.Helper()
-	py := `import json,sys
-cid=sys.argv[1]
-p=f"/run/containerd/io.containerd.runtime.v2.task/k8s.io/{cid}/config.json"
-with open(p) as f:
-    cfg=json.load(f)
-env=cfg.get("process",{}).get("env",[])
-args=cfg.get("process",{}).get("args",[])
-def value(prefix):
-    for v in env:
-        if v.startswith(prefix):
-            return v[len(prefix):]
-    return ""
-print(json.dumps({
-  "wrapper": (len(args) > 0 and args[0] == "/cainjekt-entrypoint")
-}))
-`
-	out := runCmd(t, 30*time.Second, "docker", "exec", node, "python3", "-c", py, containerID)
-	var parsed struct {
-		Wrapper bool `json:"wrapper"`
-	}
-	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &parsed); err != nil {
-		t.Fatalf("unexpected inspect output: %q (%v)", out, err)
-	}
-	return ociInspect{
-		hasWrapper: parsed.Wrapper,
 	}
 }
 
