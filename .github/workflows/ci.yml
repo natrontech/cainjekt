@@ -22,7 +22,7 @@ jobs:
 
       - name: Install kind
         run: |
-          curl -fsSL -o ./kind https://kind.sigs.k8s.io/dl/v0.24.0/kind-linux-amd64
+          curl -fsSL -o ./kind https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-amd64
           chmod +x ./kind
           sudo mv ./kind /usr/local/bin/kind
           kind version
@@ -30,7 +30,7 @@ jobs:
       - name: Install kubectl
         uses: azure/setup-kubectl@v4
         with:
-          version: v1.31.0
+          version: v1.35.0
 
       - name: Verify toolchain
         run: |
