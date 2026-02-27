@@ -7,9 +7,9 @@ import (
 	"strings"
 
 	"github.com/tsuzu/cainjekt/internal/config"
-	"github.com/tsuzu/cainjekt/internal/hook"
 	"github.com/tsuzu/cainjekt/internal/nri"
-	"github.com/tsuzu/cainjekt/internal/wrapper"
+	"github.com/tsuzu/cainjekt/internal/runtime/hook"
+	"github.com/tsuzu/cainjekt/internal/runtime/wrapper"
 )
 
 func Run(log *slog.Logger, args []string) error {

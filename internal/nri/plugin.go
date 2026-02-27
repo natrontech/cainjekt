@@ -18,8 +18,6 @@ type Plugin struct {
 	log  *slog.Logger
 }
 
-const defaultContainerTrustStore = "/etc/ssl/certs/ca-certificates.crt"
-
 func Run(log *slog.Logger, args []string) error {
 	var (
 		pluginName string
@@ -89,19 +87,15 @@ func (p *Plugin) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *ap
 			config.EnvHookMode + "=" + config.ModeCreateRT,
 			config.EnvCAFile + "=" + config.DefaultCAFile,
 			config.EnvFailPolicy + "=" + config.FailPolicyOpen,
+			config.EnvHookContextFile + "=" + config.HookContextFile,
 		},
 		Timeout: api.Int(config.DefaultHookTimeoutSec),
 	}
 
 	adjustment := &api.ContainerAdjustment{}
 	adjustment.AddEnv(config.EnvWrapperMode, "1")
-	if !hasEnv(ctr.GetEnv(), config.EnvWrapperTrustStore) {
-		adjustment.AddEnv(config.EnvWrapperTrustStore, defaultContainerTrustStore)
-	}
-	for _, key := range []string{"SSL_CERT_FILE", "NODE_EXTRA_CA_CERTS", "REQUESTS_CA_BUNDLE"} {
-		if !hasEnv(ctr.GetEnv(), key) {
-			adjustment.AddEnv(key, defaultContainerTrustStore)
-		}
+	if !hasEnv(ctr.GetEnv(), config.EnvHookContextFile) {
+		adjustment.AddEnv(config.EnvHookContextFile, config.HookContextFile)
 	}
 	if args := ctr.GetArgs(); len(args) > 0 && args[0] != config.WrapperPath {
 		adjustment.UpdateArgs(append([]string{config.WrapperPath}, args...))
