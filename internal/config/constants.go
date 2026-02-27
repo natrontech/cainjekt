@@ -10,9 +10,7 @@ const (
 	EnvWrapperMode     = "CAINJEKT_WRAPPER_MODE"
 	EnvHookContextFile = "CAINJEKT_HOOK_CONTEXT_FILE"
 
-	LabelEnabled = "cainjekt.io/enabled"
-	AnnoDisable  = "cainjekt.io/disable"
-	AnnoMode     = "cainjekt.io/mode"
+	AnnoEnabled = "cainjekt.io/enabled"
 
 	AnnoProcessorsInclude = "cainjekt.io/processors.include"
 	AnnoProcessorsExclude = "cainjekt.io/processors.exclude"
