@@ -124,18 +124,17 @@ spec:
 		name      string
 		baseImage string
 		install   string
-		removeCA  bool
 	}{
 		{name: "alpine", baseImage: "alpine:3.20", install: "apk add --no-cache curl ca-certificates"},
 		{name: "debian", baseImage: "debian:12-slim", install: "apt-get update && apt-get install -y --no-install-recommends curl ca-certificates"},
 		{name: "fedora", baseImage: "fedora:40", install: "dnf -y install curl ca-certificates"},
-		{name: "debian-no-ca", baseImage: "debian:12-slim", install: "apt-get update && apt-get install -y --no-install-recommends curl ca-certificates", removeCA: true},
+		{name: "debian-no-ca", baseImage: "debian:12-slim", install: "apt-get update && apt-get install -y --no-install-recommends curl"},
 	}
 
 	for _, tc := range clientCases {
 		tc := tc
 		t.Run("client-"+tc.name, func(t *testing.T) {
-			image := buildClientImageAndLoadToKind(t, clusterName, tc.baseImage, tc.install, tc.removeCA)
+			image := buildClientImageAndLoadToKind(t, clusterName, tc.baseImage, tc.install)
 			suffix := strings.ReplaceAll(tc.name, "_", "-")
 
 			injectedName := "curl-injected-" + suffix
@@ -306,19 +305,14 @@ func requireDockerAccess(t *testing.T) {
 	}
 }
 
-func buildClientImageAndLoadToKind(t *testing.T, clusterName, baseImage, installCmd string, removeCA bool) string {
+func buildClientImageAndLoadToKind(t *testing.T, clusterName, baseImage, installCmd string) string {
 	t.Helper()
 	tag := fmt.Sprintf("cainjekt/curl-no-ca:%d", time.Now().UnixNano())
 	tmp := t.TempDir()
 	dockerfile := fmt.Sprintf(`FROM %s
-RUN %s%s
+RUN %s
 CMD ["sh", "-c", "sleep 600"]
-`, baseImage, installCmd, func() string {
-		if removeCA {
-			return " && rm -f /etc/ssl/cert.pem /etc/ssl/certs/ca-certificates.crt /etc/pki/tls/certs/ca-bundle.crt && mkdir -p /etc/ssl && : > /etc/ssl/cert.pem"
-		}
-		return ""
-	}())
+`, baseImage, installCmd)
 	df := filepath.Join(tmp, "Dockerfile")
 	if err := os.WriteFile(df, []byte(dockerfile), 0o644); err != nil {
 		t.Fatalf("write dockerfile: %v", err)
