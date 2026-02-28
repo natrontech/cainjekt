@@ -11,6 +11,14 @@ jobs:
     timeout-minutes: 45
 
     steps:
+      - name: Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+          args: --ssh
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -22,7 +30,7 @@ jobs:
 
       - name: Install kind
         run: |
-          curl -fsSL -o ./kind https://kind.sigs.k8s.io/dl/v0.24.0/kind-linux-amd64
+          curl -fsSL -o ./kind https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-amd64
           chmod +x ./kind
           sudo mv ./kind /usr/local/bin/kind
           kind version
@@ -30,7 +38,7 @@ jobs:
       - name: Install kubectl
         uses: azure/setup-kubectl@v4
         with:
-          version: v1.31.0
+          version: v1.35.0
 
       - name: Verify toolchain
         run: |
