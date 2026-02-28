@@ -180,13 +180,17 @@ func (p *processor) Apply(ctx *hookapi.Context) error {
 		}
 	}
 
-	if err := writeIndividualCA(ctx.Rootfs, p.anchorDir, orgCA); err != nil {
+	individualCAPath, err := writeIndividualCA(ctx.Rootfs, p.anchorDir, orgCA)
+	if err != nil {
 		return err
 	}
 
 	ctx.Facts.Set(hookapi.FactTrustStorePath, targetContainer)
 	ctx.Facts.Set(hookapi.FactTrustStoreKind, "bundle")
 	ctx.Facts.Set(hookapi.FactDistro, p.distro)
+	if individualCAPath != "" {
+		ctx.Facts.Set(hookapi.FactIndividualCAPath, individualCAPath)
+	}
 	return nil
 }
 
@@ -295,26 +299,26 @@ func normalizeOSReleaseValue(v string) string {
 	return strings.TrimSpace(v)
 }
 
-func writeIndividualCA(rootfs, anchorDir string, content []byte) error {
+func writeIndividualCA(rootfs, anchorDir string, content []byte) (string, error) {
 	if anchorDir == "" {
-		return nil
+		return "", nil
 	}
 	targetContainer := path.Join(anchorDir, individualCAFileName)
 	targetHost, resolvedContainer, err := resolveContainerPath(rootfs, targetContainer)
 	if err != nil {
-		return fmt.Errorf("failed to resolve individual CA path %s: %w", targetContainer, err)
+		return "", fmt.Errorf("failed to resolve individual CA path %s: %w", targetContainer, err)
 	}
 	if err := os.MkdirAll(filepath.Dir(targetHost), 0o755); err != nil {
-		return fmt.Errorf("failed to create individual CA directory %s: %w", filepath.Dir(targetHost), err)
+		return "", fmt.Errorf("failed to create individual CA directory %s: %w", filepath.Dir(targetHost), err)
 	}
 	if err := fsx.AtomicWrite(targetHost, content, fsx.WriteOptions{
 		FallbackMode:  0o644,
 		RefuseSymlink: true,
 		PreserveOwner: true,
 	}); err != nil {
-		return fmt.Errorf("failed to write individual CA file %s: %w", resolvedContainer, err)
+		return "", fmt.Errorf("failed to write individual CA file %s: %w", resolvedContainer, err)
 	}
-	return nil
+	return resolvedContainer, nil
 }
 
 func resolveContainerPath(rootfs, containerPath string) (hostPath, resolvedContainerPath string, err error) {

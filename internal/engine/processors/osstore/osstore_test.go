@@ -1,10 +1,17 @@
 package osstore
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
+	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	hookapi "github.com/tsuzu/cainjekt/internal/engine/api"
 )
@@ -182,8 +189,12 @@ func TestWriteIndividualCAResolvesSymlinkedAnchorDir(t *testing.T) {
 	mustSymlink(t, "/var/certs", filepath.Join(rootfs, "usr", "local", "share", "ca-certificates"))
 
 	content := []byte("dummy")
-	if err := writeIndividualCA(rootfs, "/usr/local/share/ca-certificates", content); err != nil {
+	resolvedPath, err := writeIndividualCA(rootfs, "/usr/local/share/ca-certificates", content)
+	if err != nil {
 		t.Fatalf("writeIndividualCA() error = %v", err)
+	}
+	if resolvedPath != "/var/certs/"+individualCAFileName {
+		t.Fatalf("resolved path mismatch: got=%q", resolvedPath)
 	}
 	got, err := os.ReadFile(filepath.Join(rootfs, "var", "certs", individualCAFileName))
 	if err != nil {
@@ -191,6 +202,37 @@ func TestWriteIndividualCAResolvesSymlinkedAnchorDir(t *testing.T) {
 	}
 	if string(got) != string(content) {
 		t.Fatalf("content mismatch: got=%q want=%q", string(got), string(content))
+	}
+}
+
+func TestApplySetsIndividualCAPathFact(t *testing.T) {
+	t.Parallel()
+
+	rootfs := t.TempDir()
+	writeOSRelease(t, rootfs, "ID=ubuntu\nID_LIKE=debian\n")
+
+	caPath := filepath.Join(t.TempDir(), "ca-bundle.pem")
+	if err := os.WriteFile(caPath, mustCreateTestCertPEM(t), 0o644); err != nil {
+		t.Fatalf("WriteFile(%q): %v", caPath, err)
+	}
+
+	ctx := &hookapi.Context{
+		Rootfs: rootfs,
+		CAFile: caPath,
+		Facts:  hookapi.NewMapFactStore(),
+	}
+
+	if err := NewDebian().Apply(ctx); err != nil {
+		t.Fatalf("Apply() error = %v", err)
+	}
+
+	got, ok := ctx.Facts.Get(hookapi.FactIndividualCAPath)
+	if !ok {
+		t.Fatalf("missing fact %q", hookapi.FactIndividualCAPath)
+	}
+	want := "/usr/local/share/ca-certificates/" + individualCAFileName
+	if got != want {
+		t.Fatalf("individual CA path mismatch: got=%q want=%q", got, want)
 	}
 }
 
@@ -218,4 +260,32 @@ func mustSymlink(t *testing.T, target, link string) {
 	if err := os.Symlink(target, link); err != nil {
 		t.Fatalf("Symlink(%q -> %q): %v", link, target, err)
 	}
+}
+
+func mustCreateTestCertPEM(t *testing.T) []byte {
+	t.Helper()
+
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("GenerateKey() error = %v", err)
+	}
+
+	now := time.Now().UTC()
+	tpl := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			CommonName: "cainjekt-test-ca",
+		},
+		NotBefore:             now.Add(-1 * time.Hour),
+		NotAfter:              now.Add(24 * time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tpl, tpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("CreateCertificate() error = %v", err)
+	}
+
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 }

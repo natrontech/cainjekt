@@ -3,9 +3,10 @@ package api
 type FactKey string
 
 const (
-	FactTrustStorePath FactKey = "trust_store_path"
-	FactTrustStoreKind FactKey = "trust_store_kind"
-	FactDistro         FactKey = "distro"
+	FactTrustStorePath   FactKey = "trust_store_path"
+	FactTrustStoreKind   FactKey = "trust_store_kind"
+	FactDistro           FactKey = "distro"
+	FactIndividualCAPath FactKey = "individual_ca_path"
 )
 
 type DetectResult struct {
