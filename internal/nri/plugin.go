@@ -2,21 +2,29 @@ package nri
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/containerd/nri/pkg/api"
 	"github.com/containerd/nri/pkg/stub"
 	"github.com/tsuzu/cainjekt/internal/config"
+	"github.com/tsuzu/cainjekt/pkg/fsx"
 )
 
 type Plugin struct {
 	stub stub.Stub
 	log  *slog.Logger
 }
+
+const dynamicCAFileName = "ca-bundle.pem"
+
+var unsafePathChars = regexp.MustCompile(`[^A-Za-z0-9._-]`)
 
 func Run(log *slog.Logger, args []string) error {
 	var (
@@ -57,12 +65,12 @@ func Run(log *slog.Logger, args []string) error {
 }
 
 func (p *Plugin) PostCreateContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) error {
-	p.log.Info("post create container", "namespace", pod.GetNamespace(), "pod", pod.GetName(), "container", ctr.GetName())
+	p.info("post create container", "namespace", getPodNamespace(pod), "pod", getPodName(pod), "container", getContainerName(ctr))
 	return nil
 }
 
 func (p *Plugin) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) (*api.ContainerAdjustment, []*api.ContainerUpdate, error) {
-	p.log.Info("create container", "namespace", pod.GetNamespace(), "pod", pod.GetName(), "container", ctr.GetName())
+	p.info("create container", "namespace", getPodNamespace(pod), "pod", getPodName(pod), "container", getContainerName(ctr))
 
 	if !shouldInject(pod, ctr) {
 		return nil, nil, nil
@@ -73,11 +81,19 @@ func (p *Plugin) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *ap
 		return nil, nil, fmt.Errorf("failed to determine own executable path: %w", err)
 	}
 
+	sourceCAFile := getenvOr(config.EnvCAFile, config.DefaultCAFile)
+	caFileForHook := sourceCAFile
+	if dynamicPath, err := stageDynamicCAFile(sourceCAFile, dynamicCARoot(), pod, ctr); err != nil {
+		p.warn("failed to stage dynamic CA bundle, falling back to source CA file", "error", err, "source", sourceCAFile)
+	} else {
+		caFileForHook = dynamicPath
+	}
+
 	hook := &api.Hook{
 		Path: self,
 		Env: []string{
 			config.EnvHookMode + "=" + config.ModeCreateRT,
-			config.EnvCAFile + "=" + config.DefaultCAFile,
+			config.EnvCAFile + "=" + caFileForHook,
 			config.EnvFailPolicy + "=" + config.FailPolicyOpen,
 			config.EnvHookContextFile + "=" + config.HookContextFile,
 		},
@@ -103,16 +119,25 @@ func (p *Plugin) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *ap
 }
 
 func (p *Plugin) RemoveContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) error {
-	p.log.Info("removed container", "namespace", pod.GetNamespace(), "pod", pod.GetName(), "container", ctr.GetName())
+	p.info("removed container", "namespace", getPodNamespace(pod), "pod", getPodName(pod), "container", getContainerName(ctr))
+	if !shouldInject(pod, ctr) {
+		return nil
+	}
+	if err := cleanupDynamicCAFile(dynamicCARoot(), pod, ctr); err != nil {
+		p.warn("failed to cleanup dynamic CA bundle", "error", err)
+	}
 	return nil
 }
 
 func (p *Plugin) onClose() {
-	p.log.Info("connection to runtime lost")
+	p.info("connection to runtime lost")
 	os.Exit(1)
 }
 
 func shouldInject(pod *api.PodSandbox, ctr *api.Container) bool {
+	if pod == nil || ctr == nil {
+		return false
+	}
 	if strings.EqualFold(pod.GetAnnotations()[config.AnnoEnabled], "true") {
 		return true
 	}
@@ -128,4 +153,125 @@ func hasEnv(env []string, key string) bool {
 		}
 	}
 	return false
+}
+
+func stageDynamicCAFile(sourceCAFile, root string, pod *api.PodSandbox, ctr *api.Container) (string, error) {
+	content, err := os.ReadFile(sourceCAFile)
+	if err != nil {
+		return "", fmt.Errorf("failed to read source CA file %s: %w", sourceCAFile, err)
+	}
+
+	targetDir := containerCADir(root, pod, ctr)
+	if err := os.MkdirAll(targetDir, 0o700); err != nil {
+		return "", fmt.Errorf("failed to create dynamic CA directory %s: %w", targetDir, err)
+	}
+
+	targetPath := filepath.Join(targetDir, dynamicCAFileName)
+	if err := fsx.AtomicWrite(targetPath, content, fsx.WriteOptions{
+		FallbackMode:  0o600,
+		RefuseSymlink: true,
+		PreserveOwner: true,
+	}); err != nil {
+		return "", fmt.Errorf("failed to write dynamic CA file %s: %w", targetPath, err)
+	}
+
+	return targetPath, nil
+}
+
+func cleanupDynamicCAFile(root string, pod *api.PodSandbox, ctr *api.Container) error {
+	targetDir := containerCADir(root, pod, ctr)
+	err := os.RemoveAll(targetDir)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("failed to remove dynamic CA directory %s: %w", targetDir, err)
+	}
+	return nil
+}
+
+func containerCADir(root string, pod *api.PodSandbox, ctr *api.Container) string {
+	return filepath.Join(root, containerCAKey(pod, ctr))
+}
+
+func containerCAKey(pod *api.PodSandbox, ctr *api.Container) string {
+	if ctr != nil {
+		if id := sanitizePathToken(ctr.GetId()); id != "" {
+			return id
+		}
+	}
+
+	parts := []string{
+		sanitizePathToken(getPodNamespace(pod)),
+		sanitizePathToken(getPodName(pod)),
+		sanitizePathToken(getPodUID(pod)),
+		sanitizePathToken(getContainerName(ctr)),
+	}
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	if len(out) == 0 {
+		return "unknown"
+	}
+	return strings.Join(out, "_")
+}
+
+func sanitizePathToken(v string) string {
+	trimmed := strings.TrimSpace(v)
+	if trimmed == "" {
+		return ""
+	}
+	safe := unsafePathChars.ReplaceAllString(trimmed, "_")
+	return strings.Trim(safe, "._-")
+}
+
+func dynamicCARoot() string {
+	return getenvOr(config.EnvDynamicCARoot, config.DefaultDynamicCARoot)
+}
+
+func getenvOr(key, fallback string) string {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		return v
+	}
+	return fallback
+}
+
+func (p *Plugin) warn(msg string, args ...any) {
+	if p != nil && p.log != nil {
+		p.log.Warn(msg, args...)
+	}
+}
+
+func (p *Plugin) info(msg string, args ...any) {
+	if p != nil && p.log != nil {
+		p.log.Info(msg, args...)
+	}
+}
+
+func getPodNamespace(pod *api.PodSandbox) string {
+	if pod == nil {
+		return ""
+	}
+	return pod.GetNamespace()
+}
+
+func getPodName(pod *api.PodSandbox) string {
+	if pod == nil {
+		return ""
+	}
+	return pod.GetName()
+}
+
+func getPodUID(pod *api.PodSandbox) string {
+	if pod == nil {
+		return ""
+	}
+	return pod.GetUid()
+}
+
+func getContainerName(ctr *api.Container) string {
+	if ctr == nil {
+		return ""
+	}
+	return ctr.GetName()
 }
