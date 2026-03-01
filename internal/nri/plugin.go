@@ -82,11 +82,9 @@ func (p *Plugin) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *ap
 	}
 
 	sourceCAFile := getenvOr(config.EnvCAFile, config.DefaultCAFile)
-	caFileForHook := sourceCAFile
-	if dynamicPath, err := stageDynamicCAFile(sourceCAFile, dynamicCARoot(), pod, ctr); err != nil {
-		p.warn("failed to stage dynamic CA bundle, falling back to source CA file", "error", err, "source", sourceCAFile)
-	} else {
-		caFileForHook = dynamicPath
+	caFileForHook, err := stageDynamicCAFile(sourceCAFile, dynamicCARoot(), pod, ctr)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	hook := &api.Hook{

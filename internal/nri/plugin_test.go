@@ -62,7 +62,7 @@ func TestCreateContainerStagesDynamicCAForHook(t *testing.T) {
 	}
 }
 
-func TestCreateContainerFallsBackWhenDynamicCAStagingFails(t *testing.T) {
+func TestCreateContainerReturnsErrorWhenDynamicCAStagingFails(t *testing.T) {
 	source := writeTempSourceCA(t)
 	rootFile := filepath.Join(t.TempDir(), "not-a-directory")
 	if err := os.WriteFile(rootFile, []byte("x"), 0o600); err != nil {
@@ -84,13 +84,11 @@ func TestCreateContainerFallsBackWhenDynamicCAStagingFails(t *testing.T) {
 	}
 
 	adj, _, err := p.CreateContainer(context.Background(), pod, ctr)
-	if err != nil {
-		t.Fatalf("CreateContainer() error = %v", err)
+	if err == nil {
+		t.Fatalf("CreateContainer() should return error when dynamic staging fails")
 	}
-	hook := adj.GetHooks().GetCreateRuntime()[0]
-	caPath := envValue(hook.GetEnv(), config.EnvCAFile)
-	if caPath != source {
-		t.Fatalf("fallback CA path mismatch: got=%q want=%q", caPath, source)
+	if adj != nil {
+		t.Fatalf("CreateContainer() adjustment should be nil on error")
 	}
 }
 
