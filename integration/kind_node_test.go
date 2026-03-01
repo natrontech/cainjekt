@@ -110,6 +110,7 @@ spec:
 
 	serviceURL := fmt.Sprintf("https://%s.%s.svc.cluster.local:8443/healthz", svc, ns)
 	image := buildClientImageAndLoadToKind(t, clusterName, "node:22-alpine", "true")
+	nodeFetchCmd := nodeFetchCommand(serviceURL)
 
 	injectedName := "node-fetch-injected"
 	injectedPod := fmt.Sprintf(`apiVersion: v1
@@ -125,8 +126,13 @@ spec:
   - name: app
     image: %s
     imagePullPolicy: IfNotPresent
-    command: ["sh", "-c", "sleep 600"]
-`, injectedName, ns, image)
+    command:
+    - sh
+    - -lc
+    - |
+      %s
+      sleep 600
+`, injectedName, ns, image, nodeFetchCmd)
 	runCmdInput(t, 30*time.Second, injectedPod, "kubectl", "apply", "-f", "-")
 	waitForPodReady(t, 2*time.Minute, ns, injectedName, "120s")
 
@@ -144,15 +150,18 @@ spec:
   - name: app
     image: %s
     imagePullPolicy: IfNotPresent
-    command: ["sh", "-c", "sleep 600"]
-`, plainName, ns, image)
+    command:
+    - sh
+    - -lc
+    - |
+      if %s; then
+        echo "unexpected success" >&2
+        exit 1
+      fi
+      sleep 600
+`, plainName, ns, image, nodeFetchCmd)
 	runCmdInput(t, 30*time.Second, plainPod, "kubectl", "apply", "-f", "-")
 	waitForPodReady(t, 2*time.Minute, ns, plainName, "120s")
-
-	nodeFetchCmd := nodeFetchCommand(serviceURL)
-	runCmd(t, 5*time.Minute, "kubectl", "exec", "-n", ns, injectedName, "--", "sh", "-lc", nodeFetchCmd)
-	runCmd(t, 5*time.Minute, "kubectl", "exec", "-n", ns, plainName, "--", "sh", "-lc",
-		fmt.Sprintf("if %s >/dev/null 2>&1; then exit 1; else exit 0; fi", nodeFetchCmd))
 }
 
 func nodeFetchCommand(url string) string {
