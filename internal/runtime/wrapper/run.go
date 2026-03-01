@@ -41,6 +41,12 @@ func Run() error {
 		}
 	}
 
+	env, err := applyContextEnv(ctx.Env)
+	if err != nil {
+		return err
+	}
+	ctx.Env = env
+
 	argv0 := os.Args[1]
 	if !strings.ContainsRune(argv0, '/') {
 		resolved, err := exec.LookPath(argv0)
@@ -54,4 +60,17 @@ func Run() error {
 		return fmt.Errorf("exec failed: %w", err)
 	}
 	return nil
+}
+
+func applyContextEnv(env []string) ([]string, error) {
+	for _, e := range env {
+		k, v, ok := strings.Cut(e, "=")
+		if !ok || strings.TrimSpace(k) == "" {
+			continue
+		}
+		if err := os.Setenv(k, v); err != nil {
+			return nil, fmt.Errorf("failed to apply env %q: %w", k, err)
+		}
+	}
+	return os.Environ(), nil
 }
