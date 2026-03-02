@@ -75,6 +75,7 @@ func (p *Plugin) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *ap
 	sourceCAFile := getenvOr(config.EnvCAFile, config.DefaultCAFile)
 	caFileForHook, err := stageDynamicCAFile(sourceCAFile, dynamicCARoot(), ctr)
 	if err != nil {
+		_ = cleanupDynamicCAFile(dynamicCARoot(), ctr)
 		return nil, nil, err
 	}
 
