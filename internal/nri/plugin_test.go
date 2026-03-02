@@ -113,7 +113,10 @@ func TestRemoveContainerCleansDynamicCADirectory(t *testing.T) {
 	if _, _, err := p.CreateContainer(context.Background(), pod, ctr); err != nil {
 		t.Fatalf("CreateContainer() error = %v", err)
 	}
-	targetDir := containerCADir(root, pod, ctr)
+	targetDir, err := containerCADir(root, ctr)
+	if err != nil {
+		t.Fatalf("containerCADir() error = %v", err)
+	}
 	if _, err := os.Stat(targetDir); err != nil {
 		t.Fatalf("expected staged directory to exist: %v", err)
 	}
@@ -123,6 +126,34 @@ func TestRemoveContainerCleansDynamicCADirectory(t *testing.T) {
 	}
 	if _, err := os.Stat(targetDir); !os.IsNotExist(err) {
 		t.Fatalf("expected staged directory to be removed, stat err=%v", err)
+	}
+}
+
+func TestCreateContainerReturnsErrorWhenContainerIDEmpty(t *testing.T) {
+	t.Setenv(config.EnvCAFile, writeTempSourceCA(t))
+	t.Setenv(config.EnvDynamicCARoot, t.TempDir())
+
+	p := &Plugin{log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	pod := &api.PodSandbox{
+		Namespace:   "default",
+		Name:        "pod-d",
+		Annotations: map[string]string{config.AnnoEnabled: "true"},
+	}
+	ctr := &api.Container{
+		Id:   "",
+		Name: "app",
+		Args: []string{"sh", "-c", "sleep 10"},
+	}
+
+	adj, _, err := p.CreateContainer(context.Background(), pod, ctr)
+	if err == nil {
+		t.Fatalf("CreateContainer() should return error when container id is empty")
+	}
+	if adj != nil {
+		t.Fatalf("CreateContainer() adjustment should be nil on error")
+	}
+	if !strings.Contains(err.Error(), "container id is empty") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

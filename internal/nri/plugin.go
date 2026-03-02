@@ -86,7 +86,7 @@ func (p *Plugin) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *ap
 	}
 
 	sourceCAFile := getenvOr(config.EnvCAFile, config.DefaultCAFile)
-	caFileForHook, err := stageDynamicCAFile(sourceCAFile, dynamicCARoot(), pod, ctr)
+	caFileForHook, err := stageDynamicCAFile(sourceCAFile, dynamicCARoot(), ctr)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -127,7 +127,7 @@ func (p *Plugin) RemoveContainer(_ context.Context, pod *api.PodSandbox, ctr *ap
 	if !shouldInject(pod, ctr) {
 		return nil
 	}
-	if err := cleanupDynamicCAFile(dynamicCARoot(), pod, ctr); err != nil {
+	if err := cleanupDynamicCAFile(dynamicCARoot(), ctr); err != nil {
 		if p.log != nil {
 			p.log.Warn("failed to cleanup dynamic CA bundle", "error", err)
 		}
@@ -163,13 +163,16 @@ func hasEnv(env []string, key string) bool {
 	return false
 }
 
-func stageDynamicCAFile(sourceCAFile, root string, pod *api.PodSandbox, ctr *api.Container) (string, error) {
+func stageDynamicCAFile(sourceCAFile, root string, ctr *api.Container) (string, error) {
 	content, err := os.ReadFile(sourceCAFile)
 	if err != nil {
 		return "", fmt.Errorf("failed to read source CA file %s: %w", sourceCAFile, err)
 	}
 
-	targetDir := containerCADir(root, pod, ctr)
+	targetDir, err := containerCADir(root, ctr)
+	if err != nil {
+		return "", err
+	}
 	if err := os.MkdirAll(targetDir, 0o700); err != nil {
 		return "", fmt.Errorf("failed to create dynamic CA directory %s: %w", targetDir, err)
 	}
@@ -186,42 +189,35 @@ func stageDynamicCAFile(sourceCAFile, root string, pod *api.PodSandbox, ctr *api
 	return targetPath, nil
 }
 
-func cleanupDynamicCAFile(root string, pod *api.PodSandbox, ctr *api.Container) error {
-	targetDir := containerCADir(root, pod, ctr)
-	err := os.RemoveAll(targetDir)
+func cleanupDynamicCAFile(root string, ctr *api.Container) error {
+	targetDir, err := containerCADir(root, ctr)
+	if err != nil {
+		return err
+	}
+	err = os.RemoveAll(targetDir)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("failed to remove dynamic CA directory %s: %w", targetDir, err)
 	}
 	return nil
 }
 
-func containerCADir(root string, pod *api.PodSandbox, ctr *api.Container) string {
-	return filepath.Join(root, containerCAKey(pod, ctr))
+func containerCADir(root string, ctr *api.Container) (string, error) {
+	key, err := containerCAKey(ctr)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, key), nil
 }
 
-func containerCAKey(pod *api.PodSandbox, ctr *api.Container) string {
-	if ctr != nil {
-		if id := sanitizePathToken(ctr.GetId()); id != "" {
-			return id
-		}
+func containerCAKey(ctr *api.Container) (string, error) {
+	if ctr == nil {
+		return "", errors.New("container is nil")
 	}
-
-	parts := []string{
-		sanitizePathToken(getPodNamespace(pod)),
-		sanitizePathToken(getPodName(pod)),
-		sanitizePathToken(getPodUID(pod)),
-		sanitizePathToken(getContainerName(ctr)),
+	id := sanitizePathToken(ctr.GetId())
+	if id == "" {
+		return "", errors.New("container id is empty")
 	}
-	out := make([]string, 0, len(parts))
-	for _, p := range parts {
-		if p != "" {
-			out = append(out, p)
-		}
-	}
-	if len(out) == 0 {
-		return "unknown"
-	}
-	return strings.Join(out, "_")
+	return id, nil
 }
 
 func sanitizePathToken(v string) string {
@@ -256,13 +252,6 @@ func getPodName(pod *api.PodSandbox) string {
 		return ""
 	}
 	return pod.GetName()
-}
-
-func getPodUID(pod *api.PodSandbox) string {
-	if pod == nil {
-		return ""
-	}
-	return pod.GetUid()
 }
 
 func getContainerName(ctr *api.Container) string {
