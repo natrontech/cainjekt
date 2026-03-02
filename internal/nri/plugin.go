@@ -65,12 +65,16 @@ func Run(log *slog.Logger, args []string) error {
 }
 
 func (p *Plugin) PostCreateContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) error {
-	p.info("post create container", "namespace", getPodNamespace(pod), "pod", getPodName(pod), "container", getContainerName(ctr))
+	if p.log != nil {
+		p.log.Info("post create container", "namespace", getPodNamespace(pod), "pod", getPodName(pod), "container", getContainerName(ctr))
+	}
 	return nil
 }
 
 func (p *Plugin) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) (*api.ContainerAdjustment, []*api.ContainerUpdate, error) {
-	p.info("create container", "namespace", getPodNamespace(pod), "pod", getPodName(pod), "container", getContainerName(ctr))
+	if p.log != nil {
+		p.log.Info("create container", "namespace", getPodNamespace(pod), "pod", getPodName(pod), "container", getContainerName(ctr))
+	}
 
 	if !shouldInject(pod, ctr) {
 		return nil, nil, nil
@@ -117,18 +121,24 @@ func (p *Plugin) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *ap
 }
 
 func (p *Plugin) RemoveContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) error {
-	p.info("removed container", "namespace", getPodNamespace(pod), "pod", getPodName(pod), "container", getContainerName(ctr))
+	if p.log != nil {
+		p.log.Info("removed container", "namespace", getPodNamespace(pod), "pod", getPodName(pod), "container", getContainerName(ctr))
+	}
 	if !shouldInject(pod, ctr) {
 		return nil
 	}
 	if err := cleanupDynamicCAFile(dynamicCARoot(), pod, ctr); err != nil {
-		p.warn("failed to cleanup dynamic CA bundle", "error", err)
+		if p.log != nil {
+			p.log.Warn("failed to cleanup dynamic CA bundle", "error", err)
+		}
 	}
 	return nil
 }
 
 func (p *Plugin) onClose() {
-	p.info("connection to runtime lost")
+	if p.log != nil {
+		p.log.Info("connection to runtime lost")
+	}
 	os.Exit(1)
 }
 
@@ -232,18 +242,6 @@ func getenvOr(key, fallback string) string {
 		return v
 	}
 	return fallback
-}
-
-func (p *Plugin) warn(msg string, args ...any) {
-	if p != nil && p.log != nil {
-		p.log.Warn(msg, args...)
-	}
-}
-
-func (p *Plugin) info(msg string, args ...any) {
-	if p != nil && p.log != nil {
-		p.log.Info(msg, args...)
-	}
 }
 
 func getPodNamespace(pod *api.PodSandbox) string {
