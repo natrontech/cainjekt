@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strings"
 
 	"github.com/containerd/nri/pkg/api"
 	"github.com/containerd/nri/pkg/stub"
@@ -33,7 +32,7 @@ func Run(log *slog.Logger, args []string) error {
 		return err
 	}
 
-	p := &Plugin{log: log}
+	p := newPlugin(log)
 	opts := []stub.Option{stub.WithOnClose(p.onClose)}
 	if pluginName != "" {
 		opts = append(opts, stub.WithPluginName(pluginName))
@@ -64,7 +63,7 @@ func (p *Plugin) PostCreateContainer(_ context.Context, pod *api.PodSandbox, ctr
 func (p *Plugin) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) (*api.ContainerAdjustment, []*api.ContainerUpdate, error) {
 	p.log.Info("create container", "namespace", pod.GetNamespace(), "pod", pod.GetName(), "container", ctr.GetName())
 
-	if !shouldInject(pod, ctr) {
+	if !shouldInject(pod) {
 		return nil, nil, nil
 	}
 
@@ -73,11 +72,18 @@ func (p *Plugin) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *ap
 		return nil, nil, fmt.Errorf("failed to determine own executable path: %w", err)
 	}
 
+	sourceCAFile := getenvOr(config.EnvCAFile, config.DefaultCAFile)
+	caFileForHook, err := stageDynamicCAFile(sourceCAFile, dynamicCARoot(), ctr)
+	if err != nil {
+		_ = cleanupDynamicCAFile(dynamicCARoot(), ctr)
+		return nil, nil, err
+	}
+
 	hook := &api.Hook{
 		Path: self,
 		Env: []string{
 			config.EnvHookMode + "=" + config.ModeCreateRT,
-			config.EnvCAFile + "=" + config.DefaultCAFile,
+			config.EnvCAFile + "=" + caFileForHook,
 			config.EnvFailPolicy + "=" + config.FailPolicyOpen,
 			config.EnvHookContextFile + "=" + config.HookContextFile,
 		},
@@ -104,28 +110,16 @@ func (p *Plugin) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *ap
 
 func (p *Plugin) RemoveContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) error {
 	p.log.Info("removed container", "namespace", pod.GetNamespace(), "pod", pod.GetName(), "container", ctr.GetName())
+	if !shouldInject(pod) {
+		return nil
+	}
+	if err := cleanupDynamicCAFile(dynamicCARoot(), ctr); err != nil {
+		p.log.Warn("failed to cleanup dynamic CA bundle", "error", err)
+	}
 	return nil
 }
 
 func (p *Plugin) onClose() {
 	p.log.Info("connection to runtime lost")
 	os.Exit(1)
-}
-
-func shouldInject(pod *api.PodSandbox, ctr *api.Container) bool {
-	if strings.EqualFold(pod.GetAnnotations()[config.AnnoEnabled], "true") {
-		return true
-	}
-
-	return false
-}
-
-func hasEnv(env []string, key string) bool {
-	prefix := key + "="
-	for _, e := range env {
-		if strings.HasPrefix(e, prefix) {
-			return true
-		}
-	}
-	return false
 }
