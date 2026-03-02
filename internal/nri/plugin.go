@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -41,7 +42,7 @@ func Run(log *slog.Logger, args []string) error {
 		return err
 	}
 
-	p := &Plugin{log: log}
+	p := newPlugin(log)
 	opts := []stub.Option{stub.WithOnClose(p.onClose)}
 	if pluginName != "" {
 		opts = append(opts, stub.WithPluginName(pluginName))
@@ -65,16 +66,12 @@ func Run(log *slog.Logger, args []string) error {
 }
 
 func (p *Plugin) PostCreateContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) error {
-	if p.log != nil {
-		p.log.Info("post create container", "namespace", getPodNamespace(pod), "pod", getPodName(pod), "container", getContainerName(ctr))
-	}
+	p.log.Info("post create container", "namespace", getPodNamespace(pod), "pod", getPodName(pod), "container", getContainerName(ctr))
 	return nil
 }
 
 func (p *Plugin) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) (*api.ContainerAdjustment, []*api.ContainerUpdate, error) {
-	if p.log != nil {
-		p.log.Info("create container", "namespace", getPodNamespace(pod), "pod", getPodName(pod), "container", getContainerName(ctr))
-	}
+	p.log.Info("create container", "namespace", getPodNamespace(pod), "pod", getPodName(pod), "container", getContainerName(ctr))
 
 	if !shouldInject(pod, ctr) {
 		return nil, nil, nil
@@ -121,25 +118,26 @@ func (p *Plugin) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *ap
 }
 
 func (p *Plugin) RemoveContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) error {
-	if p.log != nil {
-		p.log.Info("removed container", "namespace", getPodNamespace(pod), "pod", getPodName(pod), "container", getContainerName(ctr))
-	}
+	p.log.Info("removed container", "namespace", getPodNamespace(pod), "pod", getPodName(pod), "container", getContainerName(ctr))
 	if !shouldInject(pod, ctr) {
 		return nil
 	}
 	if err := cleanupDynamicCAFile(dynamicCARoot(), ctr); err != nil {
-		if p.log != nil {
-			p.log.Warn("failed to cleanup dynamic CA bundle", "error", err)
-		}
+		p.log.Warn("failed to cleanup dynamic CA bundle", "error", err)
 	}
 	return nil
 }
 
 func (p *Plugin) onClose() {
-	if p.log != nil {
-		p.log.Info("connection to runtime lost")
-	}
+	p.log.Info("connection to runtime lost")
 	os.Exit(1)
+}
+
+func newPlugin(log *slog.Logger) *Plugin {
+	if log == nil {
+		log = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
+	return &Plugin{log: log}
 }
 
 func shouldInject(pod *api.PodSandbox, ctr *api.Container) bool {

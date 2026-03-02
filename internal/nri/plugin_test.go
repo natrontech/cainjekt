@@ -17,7 +17,7 @@ func TestCreateContainerStagesDynamicCAForHook(t *testing.T) {
 	t.Setenv(config.EnvCAFile, writeTempSourceCA(t))
 	t.Setenv(config.EnvDynamicCARoot, t.TempDir())
 
-	p := &Plugin{log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	p := newPlugin(slog.New(slog.NewTextHandler(io.Discard, nil)))
 	pod := &api.PodSandbox{
 		Namespace:   "default",
 		Name:        "pod-a",
@@ -71,7 +71,7 @@ func TestCreateContainerReturnsErrorWhenDynamicCAStagingFails(t *testing.T) {
 	t.Setenv(config.EnvCAFile, source)
 	t.Setenv(config.EnvDynamicCARoot, rootFile)
 
-	p := &Plugin{log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	p := newPlugin(slog.New(slog.NewTextHandler(io.Discard, nil)))
 	pod := &api.PodSandbox{
 		Namespace:   "default",
 		Name:        "pod-b",
@@ -98,7 +98,7 @@ func TestRemoveContainerCleansDynamicCADirectory(t *testing.T) {
 	t.Setenv(config.EnvCAFile, source)
 	t.Setenv(config.EnvDynamicCARoot, root)
 
-	p := &Plugin{log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	p := newPlugin(slog.New(slog.NewTextHandler(io.Discard, nil)))
 	pod := &api.PodSandbox{
 		Namespace:   "default",
 		Name:        "pod-c",
@@ -133,7 +133,7 @@ func TestCreateContainerReturnsErrorWhenContainerIDEmpty(t *testing.T) {
 	t.Setenv(config.EnvCAFile, writeTempSourceCA(t))
 	t.Setenv(config.EnvDynamicCARoot, t.TempDir())
 
-	p := &Plugin{log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	p := newPlugin(slog.New(slog.NewTextHandler(io.Discard, nil)))
 	pod := &api.PodSandbox{
 		Namespace:   "default",
 		Name:        "pod-d",
