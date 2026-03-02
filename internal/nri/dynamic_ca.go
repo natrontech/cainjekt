@@ -64,9 +64,6 @@ func containerCADir(root string, ctr *api.Container) (string, error) {
 }
 
 func containerCAKey(ctr *api.Container) (string, error) {
-	if ctr == nil {
-		return "", errors.New("container is nil")
-	}
 	id := sanitizePathToken(ctr.GetId())
 	if id == "" {
 		return "", errors.New("container id is empty")

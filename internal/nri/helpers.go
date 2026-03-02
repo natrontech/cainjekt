@@ -17,10 +17,7 @@ func newPlugin(log *slog.Logger) *Plugin {
 	return &Plugin{log: log}
 }
 
-func shouldInject(pod *api.PodSandbox, ctr *api.Container) bool {
-	if pod == nil || ctr == nil {
-		return false
-	}
+func shouldInject(pod *api.PodSandbox) bool {
 	return strings.EqualFold(pod.GetAnnotations()[config.AnnoEnabled], "true")
 }
 
@@ -39,25 +36,4 @@ func getenvOr(key, fallback string) string {
 		return v
 	}
 	return fallback
-}
-
-func getPodNamespace(pod *api.PodSandbox) string {
-	if pod == nil {
-		return ""
-	}
-	return pod.GetNamespace()
-}
-
-func getPodName(pod *api.PodSandbox) string {
-	if pod == nil {
-		return ""
-	}
-	return pod.GetName()
-}
-
-func getContainerName(ctr *api.Container) string {
-	if ctr == nil {
-		return ""
-	}
-	return ctr.GetName()
 }
