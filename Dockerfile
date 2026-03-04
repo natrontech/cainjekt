@@ -1,5 +1,8 @@
 FROM golang:1.23-alpine AS builder
 
+# Install build dependencies
+RUN apk --no-cache add git ca-certificates
+
 WORKDIR /workspace
 
 # Copy go mod files
