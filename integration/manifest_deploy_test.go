@@ -56,10 +56,35 @@ func TestManifestDeploy_KustomizeE2E(t *testing.T) {
 		_ = tryCmd(30*time.Second, "kubectl", "delete", "configmap", "cainjekt-ca-bundle", "-n", "kube-system")
 	})
 
-	// Deploy using kustomize
+	// Deploy using kustomize with local image
 	t.Log("Deploying cainjekt using kustomize...")
 	manifestDir := filepath.Join(mustGetProjectRoot(t), "deploy", "kubernetes")
-	runCmd(t, 1*time.Minute, "kubectl", "apply", "-k", manifestDir)
+
+	// Create a temporary kustomization that uses the local image
+	tmpKustomizeDir := t.TempDir()
+	runCmd(t, 30*time.Second, "cp", "-r", manifestDir+"/.", tmpKustomizeDir)
+
+	// Update kustomization to use local image
+	kustomizationContent := `apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: kube-system
+
+resources:
+- rbac.yaml
+- daemonset.yaml
+
+images:
+- name: cainjekt
+  newName: cainjekt
+  newTag: latest
+`
+	if err := os.WriteFile(filepath.Join(tmpKustomizeDir, "kustomization.yaml"), []byte(kustomizationContent), 0644); err != nil {
+		t.Fatalf("failed to write kustomization.yaml: %v", err)
+	}
+
+	runCmd(t, 1*time.Minute, "kubectl", "apply", "-k", tmpKustomizeDir)
+	manifestDir = tmpKustomizeDir
 
 	t.Cleanup(func() {
 		t.Log("Cleaning up cainjekt deployment...")
