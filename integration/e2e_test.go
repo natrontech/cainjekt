@@ -186,6 +186,11 @@ spec:
 	for {
 		select {
 		case <-ctx2.Done():
+			// Print pod details before failing
+			podYaml, _ := runCmdWithInput(10*time.Second, "", "kubectl", "get", "pod", "test-ca-injection", "-n", ns, "-o", "yaml")
+			t.Logf("Pod YAML:\n%s", podYaml)
+			events, _ := runCmdWithInput(10*time.Second, "", "kubectl", "get", "events", "-n", ns, "--sort-by=.metadata.creationTimestamp")
+			t.Logf("Namespace events:\n%s", events)
 			t.Fatal("timeout waiting for test pod to be running")
 		case <-time.After(3 * time.Second):
 			phase, _ := runCmdWithInput(10*time.Second, "", "kubectl", "get", "pod", "test-ca-injection", "-n", ns, "-o", "jsonpath={.status.phase}")

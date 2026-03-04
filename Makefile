@@ -11,6 +11,7 @@ build:
 .PHONY: docker-build
 docker-build:
 	docker build -t $(IMAGE_NAME):$(IMAGE_TAG) .
+	docker build --target=installer -t $(IMAGE_NAME)-installer:$(IMAGE_TAG) .
 
 .PHONY: docker-push
 docker-push: docker-build
@@ -20,6 +21,7 @@ docker-push: docker-build
 .PHONY: kind-load
 kind-load: docker-build prepare-test-cluster
 	kind load docker-image $(IMAGE_NAME):$(IMAGE_TAG) --name $(CLUSTER_NAME)
+	kind load docker-image $(IMAGE_NAME)-installer:$(IMAGE_TAG) --name $(CLUSTER_NAME)
 
 .PHONY: prepare-test-cluster
 prepare-test-cluster:
