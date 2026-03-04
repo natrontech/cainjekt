@@ -8,7 +8,6 @@ CA certificate injection tool for Kubernetes using NRI (Node Resource Interface)
 - 🚀 Uses containerd NRI for transparent integration
 - 🎯 Per-container dynamic CA bundle staging
 - 🐧 Supports multiple OS distributions (Debian, Ubuntu, Alpine, etc.)
-- 🟢 Node.js `NODE_EXTRA_CA_CERTS` support
 - 📦 Minimal container image based on distroless (~15MB)
 - 🏗️ Multi-architecture support (amd64, arm64)
 

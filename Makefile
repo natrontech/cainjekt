@@ -44,3 +44,11 @@ exec-plugin: copy-plugin
 .PHONY: integration-test
 integration-test:
 	GOCACHE=/tmp/go-build-cache go test -tags=integration -count=1 -v ./integration
+
+.PHONY: e2e-test
+e2e-test: prepare-test-cluster
+	GOCACHE=/tmp/go-build-cache CAINJEKT_E2E_MANIFEST=1 go test -tags=integration -count=1 -v ./integration -run TestManifestDeploy
+
+.PHONY: e2e-test-all
+e2e-test-all: prepare-test-cluster
+	GOCACHE=/tmp/go-build-cache CAINJEKT_TLS_E2E=1 CAINJEKT_E2E_MANIFEST=1 go test -tags=integration -count=1 -v ./integration
