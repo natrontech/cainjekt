@@ -1,0 +1,32 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+AGENTS.md
+
+# Build artifacts
+bin/
+*.test
+*.out
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test files
+*_test.go
+integration/
+
+# CI/CD
+.github/
+
+# Kubernetes manifests
+deploy/
+
+# Misc
+hack/
+Makefile

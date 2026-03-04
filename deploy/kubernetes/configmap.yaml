@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cainjekt-ca-bundle
+  namespace: kube-system
+  labels:
+    app: cainjekt
+data:
+  ca-bundle.pem: |
+    # Replace this with your actual CA certificate bundle
+    # You can include multiple certificates in PEM format
+    # Example:
+    # -----BEGIN CERTIFICATE-----
+    # MIIDXTCCAkWgAwIBAgIJAKZ...
+    # -----END CERTIFICATE-----

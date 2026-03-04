@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: cainjekt
+  namespace: kube-system
+  labels:
+    app: cainjekt
+spec:
+  selector:
+    matchLabels:
+      app: cainjekt
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: cainjekt
+    spec:
+      serviceAccountName: cainjekt
+      hostPID: true
+      hostNetwork: true
+      priorityClassName: system-node-critical
+      tolerations:
+      - operator: Exists
+        effect: NoSchedule
+      - operator: Exists
+        effect: NoExecute
+      containers:
+      - name: cainjekt
+        image: cainjekt:latest
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          privileged: true
+        env:
+        - name: CAINJEKT_CA_FILE
+          value: /etc/cainjekt/ca-bundle.pem
+        - name: CAINJEKT_DYNAMIC_CA_ROOT
+          value: /run/cainjekt/containers
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        args:
+        - --name=cainjekt
+        - --idx=10
+        volumeMounts:
+        - name: nri-socket
+          mountPath: /var/run/nri
+        - name: ca-bundle
+          mountPath: /etc/cainjekt
+          readOnly: true
+        - name: dynamic-ca-root
+          mountPath: /run/cainjekt
+        - name: host-root
+          mountPath: /host
+          readOnly: true
+          mountPropagation: HostToContainer
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+      volumes:
+      - name: nri-socket
+        hostPath:
+          path: /var/run/nri
+          type: DirectoryOrCreate
+      - name: ca-bundle
+        configMap:
+          name: cainjekt-ca-bundle
+          optional: false
+      - name: dynamic-ca-root
+        hostPath:
+          path: /run/cainjekt
+          type: DirectoryOrCreate
+      - name: host-root
+        hostPath:
+          path: /
+          type: Directory
