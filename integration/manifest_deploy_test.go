@@ -211,8 +211,8 @@ podReady:
 		"ls", "-la", "/usr/local/share/ca-certificates/")
 	t.Logf("CA certificates directory:\n%s", output2)
 
-	if !strings.Contains(output2, "cainjekt-") {
-		t.Error("Expected to find cainjekt CA file in /usr/local/share/ca-certificates/")
+	if !strings.Contains(output2, "cainjekt.crt") {
+		t.Error("Expected to find cainjekt.crt in /usr/local/share/ca-certificates/")
 	}
 
 	// Verify the CA is in the trust store
