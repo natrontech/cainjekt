@@ -71,9 +71,25 @@ func TestManifestDeploy_KustomizeE2E(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 
+	// First check: verify DaemonSet exists and get initial status
+	dsStatus, _ := runCmdWithInput(30*time.Second, "", "kubectl", "get", "daemonset", "cainjekt", "-n", "kube-system", "-o", "yaml")
+	t.Logf("Initial DaemonSet status:\n%s", dsStatus)
+
+	// Get pod status for debugging
+	podList, _ := runCmdWithInput(30*time.Second, "", "kubectl", "get", "pods", "-n", "kube-system", "-l", "app=cainjekt", "-o", "wide")
+	t.Logf("Pods status:\n%s", podList)
+
 	for {
 		select {
 		case <-ctx.Done():
+			// Final debug info before failing
+			t.Log("Timeout reached. Gathering debug information...")
+			podDesc, _ := runCmdWithInput(30*time.Second, "", "kubectl", "describe", "pods", "-n", "kube-system", "-l", "app=cainjekt")
+			t.Logf("Pod description:\n%s", podDesc)
+
+			podLogs, _ := runCmdWithInput(30*time.Second, "", "kubectl", "logs", "-n", "kube-system", "-l", "app=cainjekt", "--tail=100", "--all-containers=true")
+			t.Logf("Pod logs:\n%s", podLogs)
+
 			t.Fatal("timeout waiting for DaemonSet to be ready")
 		case <-time.After(5 * time.Second):
 			out, _ := runCmdWithInput(10*time.Second, "", "kubectl", "get", "daemonset", "cainjekt", "-n", "kube-system", "-o", "jsonpath={.status.numberReady}")
@@ -81,6 +97,13 @@ func TestManifestDeploy_KustomizeE2E(t *testing.T) {
 				t.Log("DaemonSet is ready")
 				goto ready
 			}
+
+			// Show more detailed status every 30 seconds
+			if time.Now().Unix()%30 == 0 {
+				podStatus, _ := runCmdWithInput(10*time.Second, "", "kubectl", "get", "pods", "-n", "kube-system", "-l", "app=cainjekt")
+				t.Logf("Current pod status:\n%s", podStatus)
+			}
+
 			t.Logf("Waiting for DaemonSet... (numberReady=%s)", strings.TrimSpace(out))
 		}
 	}
