@@ -1,7 +1,4 @@
-FROM golang:1.24-alpine AS builder
-
-# Install build dependencies
-RUN apk --no-cache add git ca-certificates
+FROM golang:1.25 AS builder
 
 WORKDIR /workspace
 
@@ -13,14 +10,10 @@ RUN go mod download
 COPY . .
 
 # Build the binary
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o cainjekt ./cmd/cainjekt
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -ldflags="-s -w" -trimpath -o cainjekt ./cmd/cainjekt
 
-FROM alpine:3.21
-
-# Install ca-certificates for HTTPS
-RUN apk --no-cache add ca-certificates
-
-WORKDIR /
+# Use distroless base image for minimal attack surface
+FROM gcr.io/distroless/static-debian12:nonroot
 
 # Copy the binary from builder
 COPY --from=builder /workspace/cainjekt /cainjekt
