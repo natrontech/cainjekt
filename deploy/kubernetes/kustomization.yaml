@@ -8,9 +8,6 @@ resources:
 - configmap.yaml
 - daemonset.yaml
 
-commonLabels:
-  app: cainjekt
-
 images:
 - name: cainjekt
   newName: ghcr.io/tsuzu/cainjekt
