@@ -4,27 +4,34 @@ This directory contains Kubernetes manifests for deploying cainjekt as a DaemonS
 
 ## Prerequisites
 
-- Kubernetes cluster with NRI enabled in containerd
+- Kubernetes cluster with containerd runtime
 - kubectl configured to access the cluster
 - CA certificate bundle you want to inject
 
+**Note on NRI Support:**
+- containerd v2.0+: NRI is **enabled by default** - no configuration needed
+- containerd v1.x: NRI must be manually enabled (see troubleshooting section)
+
 ## Quick Start
 
-### 1. Enable NRI in containerd
+### 1. Verify NRI is enabled (optional)
 
-NRI must be enabled in containerd configuration. Add the following to your containerd config (typically `/etc/containerd/config.toml`):
+For **containerd v2.0 and later**, NRI is enabled by default. You can skip this step.
 
-```toml
+For **containerd v1.x**, verify NRI is enabled by checking the containerd configuration:
+
+```bash
+# Check containerd version
+containerd --version
+
+# For v1.x, ensure NRI is enabled in /etc/containerd/config.toml:
 [plugins."io.containerd.nri.v1.nri"]
   disable = false
   socket_path = "/var/run/nri/nri.sock"
   plugin_registration_timeout = "5s"
   plugin_request_timeout = "2s"
-```
 
-Restart containerd after making this change:
-
-```bash
+# Restart containerd if you made changes:
 sudo systemctl restart containerd
 ```
 
@@ -156,15 +163,29 @@ resources:
 
 ### DaemonSet pods not starting
 
-1. Check if NRI is enabled in containerd:
+1. **Check containerd version and NRI status:**
    ```bash
-   kubectl exec -n kube-system <containerd-node> -- cat /etc/containerd/config.toml | grep -A5 nri
+   # Check containerd version on node
+   kubectl debug node/<node-name> -it --image=alpine -- chroot /host containerd --version
+
+   # For containerd v2.0+: NRI is enabled by default
+   # For containerd v1.x: Check if NRI is enabled
+   kubectl debug node/<node-name> -it --image=alpine -- chroot /host cat /etc/containerd/config.toml | grep -A5 nri
    ```
 
-2. Check for NRI socket:
+2. **Check for NRI socket:**
    ```bash
    kubectl exec -n kube-system <cainjekt-pod> -- ls -la /var/run/nri/
    ```
+
+   If socket doesn't exist and you're on containerd v1.x, you need to enable NRI:
+   ```toml
+   # Add to /etc/containerd/config.toml on each node
+   [plugins."io.containerd.nri.v1.nri"]
+     disable = false
+     socket_path = "/var/run/nri/nri.sock"
+   ```
+   Then restart containerd: `systemctl restart containerd`
 
 ### CA not being injected
 
