@@ -43,13 +43,9 @@ jobs:
         run: go test ./...
 
       - name: Integration tests
-        env:
-          CAINJEKT_TLS_E2E: "1"
         run: make integration-test
 
-      - name: E2E manifest deployment test
-        env:
-          CAINJEKT_E2E_MANIFEST: "1"
+      - name: E2E tests
         run: make e2e-test
 
   docker:

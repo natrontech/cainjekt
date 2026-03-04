@@ -12,9 +12,9 @@ import (
 	"time"
 )
 
-func TestManifestDeploy_KustomizeE2E(t *testing.T) {
-	if getenvOr("CAINJEKT_E2E_MANIFEST", "0") != "1" {
-		t.Skip("set CAINJEKT_E2E_MANIFEST=1 to run manifest deployment E2E test")
+func TestE2E_ManifestDeployment(t *testing.T) {
+	if getenvOr("CAINJEKT_E2E", "0") != "1" {
+		t.Skip("set CAINJEKT_E2E=1 to run E2E manifest deployment test")
 	}
 
 	clusterName := getenvOr("CAINJEKT_CLUSTER_NAME", "cainjekt-test-cluster")
@@ -222,7 +222,7 @@ podReady:
 		t.Error("Expected to find certificates in trust store")
 	}
 
-	t.Log("✅ E2E test passed: CA injection via manifest deployment works!")
+	t.Log("✅ E2E test passed: manifest deployment with CA injection works!")
 }
 
 func writeTestCABundle(t *testing.T) string {
