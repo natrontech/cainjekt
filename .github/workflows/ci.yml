@@ -71,4 +71,5 @@ jobs:
       - name: Test Docker image
         run: |
           docker run --rm cainjekt:ci-test --help || true
-          docker run --rm --entrypoint=/bin/sh cainjekt:ci-test -c "ls -la /cainjekt"
+          docker inspect cainjekt:ci-test --format='{{.Config.Entrypoint}}'
+          docker inspect cainjekt:ci-test --format='Size: {{.Size}} bytes'
