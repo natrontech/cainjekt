@@ -35,7 +35,23 @@ containerd --version
 sudo systemctl restart containerd
 ```
 
-### 2. Prepare your CA bundle
+### 2. (Optional) Use pre-built image from GHCR
+
+The project provides pre-built container images on GitHub Container Registry:
+
+```bash
+# Images are available at:
+# ghcr.io/tsuzu/cainjekt:latest (latest main branch)
+# ghcr.io/tsuzu/cainjekt:v1.0.0 (specific version)
+# ghcr.io/tsuzu/cainjekt:main-<sha> (specific commit)
+
+# Supports both amd64 and arm64 architectures
+docker pull ghcr.io/tsuzu/cainjekt:latest
+```
+
+The kustomization.yaml already points to the GHCR image. If you want to use a different image, update the `newName` in `kustomization.yaml`.
+
+### 3. Prepare your CA bundle
 
 Edit `configmap.yaml` and replace the placeholder with your actual CA certificate bundle:
 
@@ -46,7 +62,7 @@ kubectl create configmap cainjekt-ca-bundle \
   --dry-run=client -o yaml > configmap.yaml
 ```
 
-### 3. Deploy using kubectl
+### 4. Deploy using kubectl
 
 ```bash
 kubectl apply -f rbac.yaml
@@ -54,7 +70,7 @@ kubectl apply -f configmap.yaml
 kubectl apply -f daemonset.yaml
 ```
 
-### 4. Deploy using kustomize
+### 5. Deploy using kustomize
 
 ```bash
 kubectl apply -k .

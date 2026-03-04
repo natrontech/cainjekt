@@ -1,5 +1,8 @@
 FROM golang:1.25 AS builder
 
+ARG TARGETOS
+ARG TARGETARCH
+
 WORKDIR /workspace
 
 # Copy go mod files
@@ -10,7 +13,8 @@ RUN go mod download
 COPY . .
 
 # Build the binary
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -ldflags="-s -w" -trimpath -o cainjekt ./cmd/cainjekt
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
+    go build -a -ldflags="-s -w" -trimpath -o cainjekt ./cmd/cainjekt
 
 # Use distroless base image for minimal attack surface
 FROM gcr.io/distroless/static-debian12:nonroot
