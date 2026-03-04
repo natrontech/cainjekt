@@ -76,7 +76,7 @@ func TestManifestDeploy_KustomizeE2E(t *testing.T) {
 		case <-ctx.Done():
 			t.Fatal("timeout waiting for DaemonSet to be ready")
 		case <-time.After(5 * time.Second):
-			out := tryCmd(10*time.Second, "kubectl", "get", "daemonset", "cainjekt", "-n", "kube-system", "-o", "jsonpath={.status.numberReady}")
+			out, _ := runCmdWithInput(10*time.Second, "", "kubectl", "get", "daemonset", "cainjekt", "-n", "kube-system", "-o", "jsonpath={.status.numberReady}")
 			if strings.TrimSpace(out) == "1" {
 				t.Log("DaemonSet is ready")
 				goto ready
@@ -140,7 +140,7 @@ spec:
 		case <-ctx2.Done():
 			t.Fatal("timeout waiting for test pod to be running")
 		case <-time.After(3 * time.Second):
-			phase := tryCmd(10*time.Second, "kubectl", "get", "pod", "test-ca-injection", "-n", ns, "-o", "jsonpath={.status.phase}")
+			phase, _ := runCmdWithInput(10*time.Second, "", "kubectl", "get", "pod", "test-ca-injection", "-n", ns, "-o", "jsonpath={.status.phase}")
 			if strings.TrimSpace(phase) == "Running" {
 				t.Log("Test pod is running")
 				goto podReady
