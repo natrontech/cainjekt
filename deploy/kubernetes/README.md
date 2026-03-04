@@ -51,29 +51,45 @@ docker pull ghcr.io/tsuzu/cainjekt:latest
 
 The kustomization.yaml already points to the GHCR image. If you want to use a different image, update the `newName` in `kustomization.yaml`.
 
-### 3. Prepare your CA bundle
+### 3. Create ConfigMap with your CA bundle
 
-Edit `configmap.yaml` and replace the placeholder with your actual CA certificate bundle:
+Create a ConfigMap containing your CA certificate bundle:
 
 ```bash
 kubectl create configmap cainjekt-ca-bundle \
   --from-file=ca-bundle.pem=/path/to/your/ca-bundle.pem \
-  --namespace=kube-system \
-  --dry-run=client -o yaml > configmap.yaml
+  --namespace=kube-system
 ```
+
+**Note**: The ConfigMap is not included in the kustomization by default. You must create it separately with your actual CA bundle.
 
 ### 4. Deploy using kubectl
 
 ```bash
+# Deploy the manifests
 kubectl apply -f rbac.yaml
-kubectl apply -f configmap.yaml
 kubectl apply -f daemonset.yaml
 ```
 
 ### 5. Deploy using kustomize
 
 ```bash
+# Create ConfigMap first
+kubectl create configmap cainjekt-ca-bundle \
+  --from-file=ca-bundle.pem=/path/to/your/ca-bundle.pem \
+  --namespace=kube-system
+
+# Then apply kustomization
 kubectl apply -k .
+```
+
+### 6. Deploy using the deployment script
+
+The script handles ConfigMap creation automatically:
+
+```bash
+cd deploy/kubernetes
+./deploy.sh --ca-file /path/to/ca-bundle.pem
 ```
 
 ## Verify Installation

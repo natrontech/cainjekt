@@ -5,7 +5,6 @@ namespace: kube-system
 
 resources:
 - rbac.yaml
-- configmap.yaml
 - daemonset.yaml
 
 images:
