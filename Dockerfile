@@ -17,7 +17,8 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
     go build -a -ldflags="-s -w" -trimpath -o cainjekt ./cmd/cainjekt
 
 # Use distroless base image for minimal attack surface
-FROM gcr.io/distroless/static-debian12:nonroot
+# Note: Using root variant because the NRI plugin needs root access to connect to containerd's NRI socket
+FROM gcr.io/distroless/static-debian12:latest
 
 # Copy the binary from builder
 COPY --from=builder /workspace/cainjekt /cainjekt
