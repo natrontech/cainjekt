@@ -16,6 +16,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
+      attestations: write
 
     steps:
       - name: Checkout
@@ -63,6 +65,38 @@ jobs:
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
 
+      - name: Extract metadata for installer
+        id: meta-installer
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-installer
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push installer image
+        id: build-installer
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          target: installer
+          push: true
+          tags: ${{ steps.meta-installer.outputs.tags }}
+          labels: ${{ steps.meta-installer.outputs.labels }}
+          cache-from: type=gha
+          platforms: linux/amd64,linux/arm64
+
+      - name: Generate installer artifact attestation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-installer
+          subject-digest: ${{ steps.build-installer.outputs.digest }}
+          push-to-registry: true
+
   release-manifests:
     runs-on: ubuntu-latest
     needs: build-and-push
@@ -101,6 +135,9 @@ jobs:
           images:
           - name: cainjekt
             newName: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+            newTag: ${{ steps.version.outputs.VERSION }}
+          - name: cainjekt-installer
+            newName: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-installer
             newTag: ${{ steps.version.outputs.VERSION }}
           EOF
 
@@ -166,16 +203,22 @@ jobs:
           body: |
             ## Container Images
 
+            **Main image:**
             - `${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}`
             - `${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest`
+
+            **Installer image (used by initContainer):**
+            - `${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-installer:${{ steps.version.outputs.VERSION }}`
+            - `${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-installer:latest`
 
             Both `linux/amd64` and `linux/arm64` platforms are supported.
 
             ## Installation
 
             ```bash
-            # Pull the image
+            # Pull the images
             docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-installer:${{ steps.version.outputs.VERSION }}
 
             # Create ConfigMap with your CA bundle
             kubectl create configmap cainjekt-ca-bundle \
