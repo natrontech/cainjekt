@@ -1,6 +1,6 @@
 module github.com/tsuzu/cainjekt
 
-go 1.25.0
+go 1.25
 
 require (
 	github.com/containerd/nri v0.11.0

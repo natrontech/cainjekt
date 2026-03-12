@@ -21,8 +21,8 @@ import (
 )
 
 func TestKindIntegration_HTTPSWithInjectedCA(t *testing.T) {
-	if getenvOr("CAINJEKT_TLS_E2E", "0") != "1" {
-		t.Skip("set CAINJEKT_TLS_E2E=1 to run TLS trust E2E test")
+	if getenvOr("CAINJEKT_TLS_INTEGRATION", "0") != "1" {
+		t.Skip("set CAINJEKT_TLS_INTEGRATION=1 to run TLS trust integration test")
 	}
 
 	clusterName := getenvOr("CAINJEKT_CLUSTER_NAME", "cainjekt-test-cluster")

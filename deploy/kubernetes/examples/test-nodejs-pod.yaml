@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-nodejs-ca-injection
+  annotations:
+    cainjekt.io/enabled: "true"
+spec:
+  containers:
+  - name: nodejs
+    image: node:20-alpine
+    command: ["sh", "-c", "sleep infinity"]
+  restartPolicy: Never

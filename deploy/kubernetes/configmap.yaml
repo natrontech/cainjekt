@@ -1,0 +1,30 @@
+# This file is a template for reference only.
+# DO NOT apply this file directly.
+#
+# Instead, create the ConfigMap from your actual CA bundle file:
+#
+#   kubectl create configmap cainjekt-ca-bundle \
+#     --from-file=ca-bundle.pem=/path/to/your/ca-bundle.pem \
+#     --namespace=kube-system
+#
+# Or use the deployment script:
+#
+#   ./deploy.sh --ca-file /path/to/ca-bundle.pem
+#
+# Example format of the ConfigMap:
+#
+# apiVersion: v1
+# kind: ConfigMap
+# metadata:
+#   name: cainjekt-ca-bundle
+#   namespace: kube-system
+#   labels:
+#     app: cainjekt
+# data:
+#   ca-bundle.pem: |
+#     -----BEGIN CERTIFICATE-----
+#     MIIDXTCCAkWgAwIBAgIJAKZ...
+#     -----END CERTIFICATE-----
+#     -----BEGIN CERTIFICATE-----
+#     MIIDXTCCAkWgAwIBAgIJAKZ...
+#     -----END CERTIFICATE-----

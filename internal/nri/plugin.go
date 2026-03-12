@@ -67,9 +67,14 @@ func (p *Plugin) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *ap
 		return nil, nil, nil
 	}
 
-	self, err := os.Executable()
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to determine own executable path: %w", err)
+	// Use env var if set (for DaemonSet deployment), otherwise use os.Executable()
+	self := getenvOr(config.EnvPluginBinaryPath, "")
+	if self == "" {
+		var err error
+		self, err = os.Executable()
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to determine plugin binary path: %w", err)
+		}
 	}
 
 	sourceCAFile := getenvOr(config.EnvCAFile, config.DefaultCAFile)
