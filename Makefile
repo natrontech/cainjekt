@@ -2,11 +2,17 @@ CLUSTER_NAME ?= cainjekt-test-cluster
 IMAGE_NAME ?= cainjekt
 IMAGE_TAG ?= latest
 IMAGE_REGISTRY ?= ghcr.io/tsuzu
+KIND_PLUGIN_OS ?= linux
 
 .PHONY: build
 build:
 	mkdir -p bin
 	CGO_ENABLED=0 go build -o bin/cainjekt ./cmd/cainjekt
+
+.PHONY: build-kind-plugin
+build-kind-plugin:
+	mkdir -p bin
+	CGO_ENABLED=0 GOOS=$(KIND_PLUGIN_OS) go build -o bin/cainjekt-kind ./cmd/cainjekt
 
 .PHONY: docker-build
 docker-build:
@@ -36,8 +42,8 @@ reset-test-cluster:
 	kind export kubeconfig --name $(CLUSTER_NAME)
 
 .PHONY: copy-plugin
-copy-plugin: build prepare-test-cluster
-	docker cp ./bin/cainjekt $(shell kind get nodes --name=$(CLUSTER_NAME) | head -n 1):/cainjekt
+copy-plugin: build-kind-plugin prepare-test-cluster
+	docker cp ./bin/cainjekt-kind $(shell kind get nodes --name=$(CLUSTER_NAME) | head -n 1):/cainjekt
 
 .PHONY: exec-plugin
 exec-plugin: copy-plugin
