@@ -160,9 +160,14 @@ You can include or exclude specific processors using annotations:
 metadata:
   annotations:
     cainjekt.io/enabled: "true"
-    cainjekt.io/processors.include: "osstore,nodejs"
+    cainjekt.io/processors.include: "osstore,lang-nodejs,lang-python"
     cainjekt.io/processors.exclude: "java"
 ```
+
+Language-specific processors currently include:
+
+- `lang-nodejs`: sets `NODE_EXTRA_CA_CERTS`
+- `lang-python`: sets `SSL_CERT_FILE` and `REQUESTS_CA_BUNDLE`
 
 ## Customization
 

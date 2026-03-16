@@ -8,6 +8,7 @@ import (
 	hookapi "github.com/tsuzu/cainjekt/internal/engine/api"
 	"github.com/tsuzu/cainjekt/internal/engine/processors/nodejs"
 	"github.com/tsuzu/cainjekt/internal/engine/processors/osstore"
+	"github.com/tsuzu/cainjekt/internal/engine/processors/python"
 )
 
 var (
@@ -24,6 +25,7 @@ func init() {
 	Register(osstore.NewArch())
 	Register(osstore.NewFallback())
 	Register(nodejs.New())
+	Register(python.New())
 }
 
 // Register adds a processor to the default registry.
