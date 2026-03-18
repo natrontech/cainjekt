@@ -1,18 +1,17 @@
 package nodejs
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
 	hookapi "github.com/tsuzu/cainjekt/internal/engine/api"
+	"github.com/tsuzu/cainjekt/internal/testutil"
 )
 
 func TestDetectApplicableWhenNodeExists(t *testing.T) {
 	t.Parallel()
 
 	rootfs := t.TempDir()
-	writeNodeBinary(t, rootfs, "/usr/bin/node")
+	testutil.WriteExecutableInRootfs(t, rootfs, "/usr/bin/node")
 
 	p := New()
 	got := p.Detect(&hookapi.Context{Rootfs: rootfs})
@@ -45,7 +44,7 @@ func TestApplyWrapperSetsNodeExtraCACerts(t *testing.T) {
 		t.Fatalf("ApplyWrapper() error = %v", err)
 	}
 
-	if got := envValue(ctx.Env, envNodeExtraCACerts); got != "/usr/local/share/ca-certificates/cainjekt.crt" {
+	if got := testutil.EnvValue(ctx.Env, envNodeExtraCACerts); got != "/usr/local/share/ca-certificates/cainjekt.crt" {
 		t.Fatalf("env %q mismatch: got=%q", envNodeExtraCACerts, got)
 	}
 }
@@ -64,7 +63,7 @@ func TestApplyWrapperOverwritesExistingNodeExtraCACerts(t *testing.T) {
 		t.Fatalf("ApplyWrapper() error = %v", err)
 	}
 
-	if got := envValue(ctx.Env, envNodeExtraCACerts); got != "/usr/local/share/ca-certificates/cainjekt.crt" {
+	if got := testutil.EnvValue(ctx.Env, envNodeExtraCACerts); got != "/usr/local/share/ca-certificates/cainjekt.crt" {
 		t.Fatalf("env %q mismatch: got=%q", envNodeExtraCACerts, got)
 	}
 }
@@ -81,29 +80,7 @@ func TestApplyWrapperNoopWithoutIndividualCAPath(t *testing.T) {
 	if err := p.ApplyWrapper(ctx); err != nil {
 		t.Fatalf("ApplyWrapper() error = %v", err)
 	}
-	if got := envValue(ctx.Env, envNodeExtraCACerts); got != "" {
+	if got := testutil.EnvValue(ctx.Env, envNodeExtraCACerts); got != "" {
 		t.Fatalf("env %q should not be set: got=%q", envNodeExtraCACerts, got)
 	}
-}
-
-func writeNodeBinary(t *testing.T, rootfs, containerPath string) {
-	t.Helper()
-
-	hostPath := pathInRootfs(rootfs, containerPath)
-	if err := os.MkdirAll(filepath.Dir(hostPath), 0o755); err != nil {
-		t.Fatalf("MkdirAll(%q): %v", filepath.Dir(hostPath), err)
-	}
-	if err := os.WriteFile(hostPath, []byte("#!/bin/sh\n"), 0o755); err != nil {
-		t.Fatalf("WriteFile(%q): %v", hostPath, err)
-	}
-}
-
-func envValue(env []string, key string) string {
-	prefix := key + "="
-	for _, e := range env {
-		if len(e) > len(prefix) && e[:len(prefix)] == prefix {
-			return e[len(prefix):]
-		}
-	}
-	return ""
 }

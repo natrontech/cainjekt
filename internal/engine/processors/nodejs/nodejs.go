@@ -1,11 +1,11 @@
 package nodejs
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 
 	hookapi "github.com/tsuzu/cainjekt/internal/engine/api"
+	"github.com/tsuzu/cainjekt/internal/util/containerfs"
+	"github.com/tsuzu/cainjekt/internal/util/envutil"
 )
 
 const (
@@ -59,37 +59,10 @@ func (p *processor) ApplyWrapper(ctx *hookapi.Context) error {
 	if individualCAPath == "" {
 		return nil
 	}
-	ctx.Env = upsertEnv(ctx.Env, envNodeExtraCACerts, individualCAPath)
+	ctx.Env = envutil.Upsert(ctx.Env, envNodeExtraCACerts, individualCAPath)
 	return nil
 }
 
 func hasNodeBinary(rootfs string) bool {
-	for _, p := range nodeBinaryCandidates {
-		host := pathInRootfs(rootfs, p)
-		fi, err := os.Stat(host)
-		if err != nil {
-			continue
-		}
-		if fi.Mode().IsRegular() {
-			return true
-		}
-	}
-	return false
-}
-
-func upsertEnv(env []string, key, value string) []string {
-	prefix := key + "="
-	entry := prefix + value
-	for i, e := range env {
-		if strings.HasPrefix(e, prefix) {
-			env[i] = entry
-			return env
-		}
-	}
-	return append(env, entry)
-}
-
-func pathInRootfs(rootfs, containerPath string) string {
-	trimmed := strings.TrimPrefix(containerPath, "/")
-	return filepath.Join(rootfs, filepath.FromSlash(trimmed))
+	return containerfs.HasAnyRegularFile(rootfs, nodeBinaryCandidates)
 }
