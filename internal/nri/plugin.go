@@ -99,6 +99,7 @@ func (p *Plugin) CreateContainer(
 			config.EnvFailPolicy + "=" + config.FailPolicyOpen,
 			config.EnvHookContextFile + "=" + config.HookContextFile,
 			config.EnvAnnotationPrefix + "=" + config.AnnotationPrefix(),
+			config.EnvLogLevel + "=" + getenvOr(config.EnvLogLevel, "info"),
 		},
 		Timeout: api.Int(config.DefaultHookTimeoutSec),
 	}

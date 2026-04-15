@@ -7,10 +7,12 @@ import (
 	"sync"
 
 	hookapi "github.com/natrontech/cainjekt/internal/engine/api"
+	"github.com/natrontech/cainjekt/internal/engine/processors/golang"
 	"github.com/natrontech/cainjekt/internal/engine/processors/java"
 	"github.com/natrontech/cainjekt/internal/engine/processors/nodejs"
 	"github.com/natrontech/cainjekt/internal/engine/processors/osstore"
 	"github.com/natrontech/cainjekt/internal/engine/processors/python"
+	"github.com/natrontech/cainjekt/internal/engine/processors/ruby"
 )
 
 var (
@@ -26,9 +28,11 @@ func init() {
 	Register(osstore.NewAlpine())
 	Register(osstore.NewArch())
 	Register(osstore.NewFallback())
+	Register(golang.New())
 	Register(java.New())
 	Register(nodejs.New())
 	Register(python.New())
+	Register(ruby.New())
 }
 
 // Register adds a processor to the default registry.

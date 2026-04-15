@@ -19,6 +19,7 @@ const (
 	EnvHookContextFile  = "CAINJEKT_HOOK_CONTEXT_FILE"
 	EnvPluginBinaryPath = "CAINJEKT_PLUGIN_BINARY_PATH"
 	EnvAnnotationPrefix = "CAINJEKT_ANNOTATION_PREFIX"
+	EnvLogLevel         = "CAINJEKT_LOG_LEVEL"
 
 	DefaultAnnotationPrefix = "cainjekt.natron.io"
 
