@@ -4,9 +4,9 @@ package nodejs
 import (
 	"strings"
 
-	hookapi "github.com/tsuzu/cainjekt/internal/engine/api"
-	"github.com/tsuzu/cainjekt/internal/util/containerfs"
-	"github.com/tsuzu/cainjekt/internal/util/envutil"
+	hookapi "github.com/natrontech/cainjekt/internal/engine/api"
+	"github.com/natrontech/cainjekt/internal/util/containerfs"
+	"github.com/natrontech/cainjekt/internal/util/envutil"
 )
 
 const (

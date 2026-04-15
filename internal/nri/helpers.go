@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/containerd/nri/pkg/api"
-	"github.com/tsuzu/cainjekt/internal/config"
+	"github.com/natrontech/cainjekt/internal/config"
 )
 
 func newPlugin(log *slog.Logger) *Plugin {

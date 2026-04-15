@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/tsuzu/cainjekt/internal/util/containerfs"
+	"github.com/natrontech/cainjekt/internal/util/containerfs"
 )
 
 // WriteExecutableInRootfs creates a minimal executable at the given container path inside rootfs.

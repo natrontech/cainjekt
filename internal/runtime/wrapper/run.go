@@ -8,9 +8,9 @@ import (
 	"strings"
 	"syscall"
 
-	hookapi "github.com/tsuzu/cainjekt/internal/engine/api"
-	"github.com/tsuzu/cainjekt/internal/engine/processors"
-	"github.com/tsuzu/cainjekt/internal/runtime/hookctx"
+	hookapi "github.com/natrontech/cainjekt/internal/engine/api"
+	"github.com/natrontech/cainjekt/internal/engine/processors"
+	"github.com/natrontech/cainjekt/internal/runtime/hookctx"
 )
 
 // Run executes the wrapper phase: applies language-specific env vars and execs the original entrypoint.

@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/containerd/nri/pkg/api"
-	"github.com/tsuzu/cainjekt/internal/config"
-	"github.com/tsuzu/cainjekt/pkg/fsx"
+	"github.com/natrontech/cainjekt/internal/config"
+	"github.com/natrontech/cainjekt/pkg/fsx"
 )
 
 const dynamicCAFileName = "ca-bundle.pem"

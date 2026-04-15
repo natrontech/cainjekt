@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/tsuzu/cainjekt/internal/config"
-	hookapi "github.com/tsuzu/cainjekt/internal/engine/api"
+	"github.com/natrontech/cainjekt/internal/config"
+	hookapi "github.com/natrontech/cainjekt/internal/engine/api"
 )
 
 func TestWriteAndRead(t *testing.T) {

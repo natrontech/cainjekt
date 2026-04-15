@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-cainjekt is a Kubernetes CA certificate injection tool using containerd NRI (Node Resource Interface). It dynamically injects custom CA certificates into containers at runtime without modifying container images. Pure Go, no CGO. The Go module path is `github.com/tsuzu/cainjekt` (forked to `natrontech/cainjekt`).
+cainjekt is a Kubernetes CA certificate injection tool using containerd NRI (Node Resource Interface). It dynamically injects custom CA certificates into containers at runtime without modifying container images. Pure Go, no CGO. The Go module path is `github.com/natrontech/cainjekt`.
 
 ## Common Commands
 

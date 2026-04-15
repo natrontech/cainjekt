@@ -3,8 +3,8 @@ package python
 import (
 	"testing"
 
-	hookapi "github.com/tsuzu/cainjekt/internal/engine/api"
-	"github.com/tsuzu/cainjekt/internal/testutil"
+	hookapi "github.com/natrontech/cainjekt/internal/engine/api"
+	"github.com/natrontech/cainjekt/internal/testutil"
 )
 
 const testIndividualCAPath = "/usr/local/share/ca-certificates/cainjekt.crt"

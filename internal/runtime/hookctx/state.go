@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/tsuzu/cainjekt/internal/config"
-	hookapi "github.com/tsuzu/cainjekt/internal/engine/api"
-	"github.com/tsuzu/cainjekt/pkg/fsx"
+	"github.com/natrontech/cainjekt/internal/config"
+	hookapi "github.com/natrontech/cainjekt/internal/engine/api"
+	"github.com/natrontech/cainjekt/pkg/fsx"
 )
 
 // DetectedProcessor records a processor's detection result for persistence.

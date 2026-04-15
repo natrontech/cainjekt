@@ -7,11 +7,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/tsuzu/cainjekt/internal/config"
-	hookapi "github.com/tsuzu/cainjekt/internal/engine/api"
-	"github.com/tsuzu/cainjekt/internal/engine/processors"
-	"github.com/tsuzu/cainjekt/internal/runtime/hookctx"
-	"github.com/tsuzu/cainjekt/internal/util/oci"
+	"github.com/natrontech/cainjekt/internal/config"
+	hookapi "github.com/natrontech/cainjekt/internal/engine/api"
+	"github.com/natrontech/cainjekt/internal/engine/processors"
+	"github.com/natrontech/cainjekt/internal/runtime/hookctx"
+	"github.com/natrontech/cainjekt/internal/util/oci"
 )
 
 // Run executes the OCI hook phase: detects processors, applies CA injection, and persists wrapper context.

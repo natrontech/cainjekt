@@ -10,7 +10,7 @@ import (
 
 	"github.com/containerd/nri/pkg/api"
 	"github.com/containerd/nri/pkg/stub"
-	"github.com/tsuzu/cainjekt/internal/config"
+	"github.com/natrontech/cainjekt/internal/config"
 )
 
 // Plugin implements the NRI stub interface for CA certificate injection.

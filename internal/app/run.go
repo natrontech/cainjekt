@@ -7,10 +7,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/tsuzu/cainjekt/internal/config"
-	"github.com/tsuzu/cainjekt/internal/nri"
-	"github.com/tsuzu/cainjekt/internal/runtime/hook"
-	"github.com/tsuzu/cainjekt/internal/runtime/wrapper"
+	"github.com/natrontech/cainjekt/internal/config"
+	"github.com/natrontech/cainjekt/internal/nri"
+	"github.com/natrontech/cainjekt/internal/runtime/hook"
+	"github.com/natrontech/cainjekt/internal/runtime/wrapper"
 )
 
 // Run detects the runtime mode and dispatches to the appropriate handler.

@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/containerd/nri/pkg/api"
-	"github.com/tsuzu/cainjekt/internal/config"
+	"github.com/natrontech/cainjekt/internal/config"
 )
 
 func TestCreateContainerStagesDynamicCAForHook(t *testing.T) {

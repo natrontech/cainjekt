@@ -6,10 +6,10 @@ import (
 	"strings"
 	"sync"
 
-	hookapi "github.com/tsuzu/cainjekt/internal/engine/api"
-	"github.com/tsuzu/cainjekt/internal/engine/processors/nodejs"
-	"github.com/tsuzu/cainjekt/internal/engine/processors/osstore"
-	"github.com/tsuzu/cainjekt/internal/engine/processors/python"
+	hookapi "github.com/natrontech/cainjekt/internal/engine/api"
+	"github.com/natrontech/cainjekt/internal/engine/processors/nodejs"
+	"github.com/natrontech/cainjekt/internal/engine/processors/osstore"
+	"github.com/natrontech/cainjekt/internal/engine/processors/python"
 )
 
 var (

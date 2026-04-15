@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	hookapi "github.com/tsuzu/cainjekt/internal/engine/api"
+	hookapi "github.com/natrontech/cainjekt/internal/engine/api"
 )
 
 func TestParseOSRelease(t *testing.T) {

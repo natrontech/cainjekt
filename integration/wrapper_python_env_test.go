@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tsuzu/cainjekt/internal/config"
-	hookapi "github.com/tsuzu/cainjekt/internal/engine/api"
-	"github.com/tsuzu/cainjekt/internal/runtime/hookctx"
+	"github.com/natrontech/cainjekt/internal/config"
+	hookapi "github.com/natrontech/cainjekt/internal/engine/api"
+	"github.com/natrontech/cainjekt/internal/runtime/hookctx"
 )
 
 func TestWrapperIntegration_PythonEnvVarsAreApplied(t *testing.T) {
