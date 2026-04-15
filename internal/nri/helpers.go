@@ -4,6 +4,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/containerd/nri/pkg/api"
@@ -43,6 +44,32 @@ func shouldInject(pod *api.PodSandbox, nsCache *nsLabelCache) bool {
 	}
 
 	return false
+}
+
+// isContainerExcluded checks the pod annotation for per-container opt-out.
+// Annotation: cainjekt.natron.io/exclude-containers: "istio-proxy,linkerd-proxy"
+func isContainerExcluded(pod *api.PodSandbox, ctr *api.Container) bool {
+	raw, ok := pod.GetAnnotations()[config.AnnoExcludeContainers()]
+	if !ok {
+		return false
+	}
+	name := strings.TrimSpace(ctr.GetName())
+	for _, excluded := range strings.Split(raw, ",") {
+		if strings.TrimSpace(excluded) == name {
+			return true
+		}
+	}
+	return false
+}
+
+// hookTimeoutSec returns the configured hook timeout from env or the default.
+func hookTimeoutSec() int {
+	if v := strings.TrimSpace(os.Getenv(config.EnvHookTimeoutSec)); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
+	}
+	return config.DefaultHookTimeoutSec
 }
 
 func hasEnv(env []string, key string) bool {

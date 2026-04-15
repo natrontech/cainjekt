@@ -3,6 +3,7 @@ package nri
 
 import (
 	"context"
+	"crypto/sha256"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -122,6 +123,13 @@ func (p *Plugin) CreateContainer(
 		return nil, nil, nil
 	}
 
+	// Per-container opt-out via annotation.
+	if isContainerExcluded(pod, ctr) {
+		p.log.Info("container excluded from injection", "container", ctr.GetName())
+		p.metrics.SkippedTotal.Inc()
+		return nil, nil, nil
+	}
+
 	p.metrics.InjectionsTotal.Inc()
 
 	// Use env var if set (for DaemonSet deployment), otherwise use os.Executable()
@@ -136,7 +144,7 @@ func (p *Plugin) CreateContainer(
 	}
 
 	sourceCAFile := getenvOr(config.EnvCAFile, config.DefaultCAFile)
-	caFileForHook, err := stageDynamicCAFile(sourceCAFile, dynamicCARoot(), ctr)
+	caFileForHook, caContent, err := stageDynamicCAFile(sourceCAFile, dynamicCARoot(), ctr)
 	if err != nil {
 		_ = cleanupDynamicCAFile(dynamicCARoot(), ctr)
 		p.metrics.InjectionsErrors.Inc()
@@ -150,6 +158,10 @@ func (p *Plugin) CreateContainer(
 		p.metrics.ActiveContainers.Inc()
 	}
 
+	// Track CA bundle hash for rotation visibility.
+	caHash := fmt.Sprintf("%x", sha256.Sum256(caContent))
+	p.metrics.CABundleHash.WithLabelValues(caHash[:12]).Inc()
+
 	hook := &api.Hook{
 		Path: self,
 		Env: []string{
@@ -160,7 +172,7 @@ func (p *Plugin) CreateContainer(
 			config.EnvAnnotationPrefix + "=" + config.AnnotationPrefix(),
 			config.EnvLogLevel + "=" + getenvOr(config.EnvLogLevel, "info"),
 		},
-		Timeout: api.Int(config.DefaultHookTimeoutSec),
+		Timeout: api.Int(hookTimeoutSec()),
 	}
 
 	adjustment := &api.ContainerAdjustment{}

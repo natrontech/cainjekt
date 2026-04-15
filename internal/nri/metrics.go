@@ -17,6 +17,7 @@ type Metrics struct {
 	ActiveContainers  prometheus.Gauge
 	ProcessorDetected *prometheus.CounterVec
 	ProcessorApplied  *prometheus.CounterVec
+	CABundleHash      *prometheus.CounterVec
 }
 
 func newMetrics() *Metrics {
@@ -62,6 +63,10 @@ func newMetrics() *Metrics {
 			Name: "cainjekt_processor_applied_total",
 			Help: "Times a processor was successfully applied.",
 		}, []string{"processor"}),
+		CABundleHash: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "cainjekt_ca_bundle_injections_total",
+			Help: "Injections per CA bundle hash (first 12 chars of SHA-256). Helps detect stale CAs after rotation.",
+		}, []string{"hash"}),
 	}
 
 	reg.MustRegister(
@@ -74,6 +79,7 @@ func newMetrics() *Metrics {
 		m.ActiveContainers,
 		m.ProcessorDetected,
 		m.ProcessorApplied,
+		m.CABundleHash,
 	)
 
 	return m

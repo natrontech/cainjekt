@@ -18,21 +18,21 @@ const dynamicCAFileName = "ca-bundle.pem"
 
 var unsafePathChars = regexp.MustCompile(`[^A-Za-z0-9._-]`)
 
-func stageDynamicCAFile(sourceCAFile, root string, ctr *api.Container) (string, error) {
+func stageDynamicCAFile(sourceCAFile, root string, ctr *api.Container) (string, []byte, error) {
 	content, err := os.ReadFile(sourceCAFile)
 	if err != nil {
-		return "", fmt.Errorf("failed to read source CA file %s: %w", sourceCAFile, err)
+		return "", nil, fmt.Errorf("failed to read source CA file %s: %w", sourceCAFile, err)
 	}
 	if err := certs.ValidatePEM(content); err != nil {
-		return "", fmt.Errorf("invalid CA bundle %s: %w", sourceCAFile, err)
+		return "", nil, fmt.Errorf("invalid CA bundle %s: %w", sourceCAFile, err)
 	}
 
 	targetDir, err := containerCADir(root, ctr)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	if err := os.MkdirAll(targetDir, 0o700); err != nil {
-		return "", fmt.Errorf("failed to create dynamic CA directory %s: %w", targetDir, err)
+		return "", nil, fmt.Errorf("failed to create dynamic CA directory %s: %w", targetDir, err)
 	}
 
 	targetPath := filepath.Join(targetDir, dynamicCAFileName)
@@ -41,10 +41,10 @@ func stageDynamicCAFile(sourceCAFile, root string, ctr *api.Container) (string, 
 		RefuseSymlink: true,
 		PreserveOwner: true,
 	}); err != nil {
-		return "", fmt.Errorf("failed to write dynamic CA file %s: %w", targetPath, err)
+		return "", nil, fmt.Errorf("failed to write dynamic CA file %s: %w", targetPath, err)
 	}
 
-	return targetPath, nil
+	return targetPath, content, nil
 }
 
 func cleanupDynamicCAFile(root string, ctr *api.Container) error {

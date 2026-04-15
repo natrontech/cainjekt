@@ -72,6 +72,9 @@ logLevel: "info"
 ## @param metricsPort Port for health/readiness/metrics HTTP server
 metricsPort: 9443
 
+## @param hookTimeoutSeconds OCI hook timeout in seconds (containerd kills the hook after this)
+hookTimeoutSeconds: 5
+
 ## @section DaemonSet parameters
 
 ## @param updateStrategy.type DaemonSet update strategy
