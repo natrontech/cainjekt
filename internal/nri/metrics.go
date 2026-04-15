@@ -7,16 +7,19 @@ import (
 
 // Metrics holds all Prometheus metrics for cainjekt.
 type Metrics struct {
-	Registry          *prometheus.Registry
-	InjectionsTotal   prometheus.Counter
-	InjectionsErrors  prometheus.Counter
-	SkippedTotal      prometheus.Counter
-	CleanupsTotal     prometheus.Counter
-	CleanupsErrors    prometheus.Counter
-	OrphansCleaned    prometheus.Counter
-	ActiveContainers  prometheus.Gauge
-	ProcessorDetected *prometheus.CounterVec
-	ProcessorApplied  *prometheus.CounterVec
+	Registry             *prometheus.Registry
+	InjectionsTotal      prometheus.Counter
+	InjectionsErrors     prometheus.Counter
+	SkippedTotal         prometheus.Counter
+	CleanupsTotal        prometheus.Counter
+	CleanupsErrors       prometheus.Counter
+	OrphansCleaned       prometheus.Counter
+	ActiveContainers     prometheus.Gauge
+	ProcessorDetected    *prometheus.CounterVec
+	ProcessorApplied     *prometheus.CounterVec
+	CABundleHash         *prometheus.CounterVec
+	CABundleLastModified prometheus.Gauge
+	CABundleCertCount    prometheus.Gauge
 }
 
 func newMetrics() *Metrics {
@@ -62,6 +65,18 @@ func newMetrics() *Metrics {
 			Name: "cainjekt_processor_applied_total",
 			Help: "Times a processor was successfully applied.",
 		}, []string{"processor"}),
+		CABundleHash: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "cainjekt_ca_bundle_injections_total",
+			Help: "Injections per CA bundle hash (first 12 chars of SHA-256). Helps detect stale CAs after rotation.",
+		}, []string{"hash"}),
+		CABundleLastModified: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "cainjekt_ca_bundle_last_modified_timestamp",
+			Help: "Unix timestamp of the CA bundle file's last modification time.",
+		}),
+		CABundleCertCount: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "cainjekt_ca_bundle_certificates_count",
+			Help: "Number of PEM certificates in the CA bundle.",
+		}),
 	}
 
 	reg.MustRegister(
@@ -74,6 +89,9 @@ func newMetrics() *Metrics {
 		m.ActiveContainers,
 		m.ProcessorDetected,
 		m.ProcessorApplied,
+		m.CABundleHash,
+		m.CABundleLastModified,
+		m.CABundleCertCount,
 	)
 
 	return m

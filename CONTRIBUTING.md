@@ -6,7 +6,7 @@ Thank you for your interest in contributing! cainjekt is an open-source project 
 
 ### Prerequisites
 
-- Go 1.25+
+- Go 1.26+
 - Docker
 - [kind](https://kind.sigs.k8s.io/) (for integration/E2E tests)
 - kubectl
@@ -99,6 +99,8 @@ This is the most common type of contribution. Follow these steps:
    - `docs/usage.md` (available processors, limitations table)
    - `deploy/kubernetes/README.md` (processor selection)
 
+See `.claude/rules/docs.md` for the full documentation sync table.
+
 Look at `internal/engine/processors/python/python.go` for a clean example.
 
 ## Conventions
@@ -130,7 +132,7 @@ Every code change that affects behavior must include doc updates. See `.claude/r
 ### Tests
 
 - Unit tests alongside source files (`_test.go`)
-- Integration tests in `integration/` with `//go:build integration` tag
+- Integration tests in `integration/` with `//go:build integration` tag (3 E2E files: basic, helm, advanced)
 - Use `t.TempDir()`, `t.Helper()`, `t.Parallel()` where applicable
 - Table-driven tests for multi-case scenarios
 
@@ -142,7 +144,8 @@ See [docs/architecture.md](docs/architecture.md) for the full technical deep-div
 - **Hook** (`internal/runtime/hook/`): Modifies container rootfs trust stores
 - **Wrapper** (`internal/runtime/wrapper/`): Sets language env vars, execs original command
 - **Processors** (`internal/engine/processors/`): Extensible detection + application system
-- **Helm Chart** (`charts/cainjekt/`): Production deployment with monitoring integration
+- **Metrics/Health** (`internal/nri/server.go`, `metrics.go`): Prometheus metrics on `:9443/metrics`, health/readiness probes
+- **Helm Chart** (`charts/cainjekt/`): Production deployment with ServiceMonitor, PrometheusRule, Grafana dashboard
 
 ## Need Help?
 

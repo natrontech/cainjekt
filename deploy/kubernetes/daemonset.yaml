@@ -19,8 +19,6 @@ spec:
         app: cainjekt
     spec:
       serviceAccountName: cainjekt
-      hostPID: true
-      hostNetwork: true
       priorityClassName: system-node-critical
       tolerations:
       - operator: Exists

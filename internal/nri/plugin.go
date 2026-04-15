@@ -3,6 +3,7 @@ package nri
 
 import (
 	"context"
+	"crypto/sha256"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -23,6 +24,7 @@ type Plugin struct {
 	log     *slog.Logger
 	metrics *Metrics
 	tracked sync.Map // map[string]struct{} — sanitized container IDs
+	nsCache *nsLabelCache
 }
 
 // Run starts the NRI plugin, HTTP server, orphan cleaner, and blocks until shutdown.
@@ -44,7 +46,8 @@ func Run(log *slog.Logger, args []string) error {
 	}
 
 	metrics := newMetrics()
-	p := &Plugin{log: log, metrics: metrics}
+	nsCache := newNSLabelCache()
+	p := &Plugin{log: log, metrics: metrics, nsCache: nsCache}
 
 	opts := []stub.Option{stub.WithOnClose(p.onClose)}
 	if pluginName != "" {
@@ -115,7 +118,14 @@ func (p *Plugin) CreateContainer(
 ) (*api.ContainerAdjustment, []*api.ContainerUpdate, error) {
 	p.log.Info("create container", "namespace", pod.GetNamespace(), "pod", pod.GetName(), "container", ctr.GetName())
 
-	if !shouldInject(pod) {
+	if !shouldInject(pod, p.nsCache) {
+		p.metrics.SkippedTotal.Inc()
+		return nil, nil, nil
+	}
+
+	// Per-container opt-out via annotation.
+	if isContainerExcluded(pod, ctr) {
+		p.log.Info("container excluded from injection", "container", ctr.GetName())
 		p.metrics.SkippedTotal.Inc()
 		return nil, nil, nil
 	}
@@ -134,7 +144,7 @@ func (p *Plugin) CreateContainer(
 	}
 
 	sourceCAFile := getenvOr(config.EnvCAFile, config.DefaultCAFile)
-	caFileForHook, err := stageDynamicCAFile(sourceCAFile, dynamicCARoot(), ctr)
+	caFileForHook, caContent, err := stageDynamicCAFile(sourceCAFile, dynamicCARoot(), ctr)
 	if err != nil {
 		_ = cleanupDynamicCAFile(dynamicCARoot(), ctr)
 		p.metrics.InjectionsErrors.Inc()
@@ -148,6 +158,13 @@ func (p *Plugin) CreateContainer(
 		p.metrics.ActiveContainers.Inc()
 	}
 
+	// Track CA bundle hash for rotation visibility.
+	caHash := fmt.Sprintf("%x", sha256.Sum256(caContent))
+	p.metrics.CABundleHash.WithLabelValues(caHash[:12]).Inc()
+
+	// Update CA bundle age and cert count gauges.
+	updateCABundleGauges(p.metrics, sourceCAFile, caContent)
+
 	hook := &api.Hook{
 		Path: self,
 		Env: []string{
@@ -158,7 +175,7 @@ func (p *Plugin) CreateContainer(
 			config.EnvAnnotationPrefix + "=" + config.AnnotationPrefix(),
 			config.EnvLogLevel + "=" + getenvOr(config.EnvLogLevel, "info"),
 		},
-		Timeout: api.Int(config.DefaultHookTimeoutSec),
+		Timeout: api.Int(hookTimeoutSec()),
 	}
 
 	adjustment := &api.ContainerAdjustment{}
@@ -191,7 +208,7 @@ func (p *Plugin) RemoveContainer(_ context.Context, pod *api.PodSandbox, ctr *ap
 		}
 	}
 
-	if !shouldInject(pod) {
+	if !shouldInject(pod, p.nsCache) {
 		return nil
 	}
 	p.metrics.CleanupsTotal.Inc()

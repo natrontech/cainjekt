@@ -137,11 +137,13 @@ annotations:
 
 ### Privileges
 
-The DaemonSet runs with `privileged: true`, `hostPID: true`, and `hostNetwork: true`. This is required because:
+The DaemonSet runs with `privileged: true`. This is required because:
 
 - **NRI socket access**: The NRI socket at `/var/run/nri` is owned by containerd and requires root access
 - **Container rootfs access**: The hook modifies files inside the container's mounted rootfs, which lives under containerd's internal storage
 - **File ownership preservation**: When modifying trust stores, cainjekt preserves the original file ownership (uid/gid), which requires root
+
+`hostNetwork` and `hostPID` are **not required** — the plugin communicates via Unix socket (hostPath volume), not the network. They are disabled by default in the Helm chart but can be enabled if needed.
 
 ### Safety Guarantees
 

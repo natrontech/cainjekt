@@ -12,14 +12,16 @@ const (
 	ModeCreateRT  = "createruntime"
 	ModeCreateCtr = "createcontainer"
 
-	EnvCAFile           = "CAINJEKT_CA_FILE"
-	EnvDynamicCARoot    = "CAINJEKT_DYNAMIC_CA_ROOT"
-	EnvFailPolicy       = "CAINJEKT_FAIL_POLICY"
-	EnvWrapperMode      = "CAINJEKT_WRAPPER_MODE"
-	EnvHookContextFile  = "CAINJEKT_HOOK_CONTEXT_FILE"
-	EnvPluginBinaryPath = "CAINJEKT_PLUGIN_BINARY_PATH"
-	EnvAnnotationPrefix = "CAINJEKT_ANNOTATION_PREFIX"
-	EnvLogLevel         = "CAINJEKT_LOG_LEVEL"
+	EnvCAFile            = "CAINJEKT_CA_FILE"
+	EnvDynamicCARoot     = "CAINJEKT_DYNAMIC_CA_ROOT"
+	EnvFailPolicy        = "CAINJEKT_FAIL_POLICY"
+	EnvWrapperMode       = "CAINJEKT_WRAPPER_MODE"
+	EnvHookContextFile   = "CAINJEKT_HOOK_CONTEXT_FILE"
+	EnvPluginBinaryPath  = "CAINJEKT_PLUGIN_BINARY_PATH"
+	EnvAnnotationPrefix  = "CAINJEKT_ANNOTATION_PREFIX"
+	EnvLogLevel          = "CAINJEKT_LOG_LEVEL"
+	EnvHookTimeoutSec    = "CAINJEKT_HOOK_TIMEOUT_SEC"
+	EnvExcludeContainers = "CAINJEKT_EXCLUDE_CONTAINERS"
 
 	DefaultAnnotationPrefix = "cainjekt.natron.io"
 
@@ -53,6 +55,9 @@ func AnnoProcessorsInclude() string { return annotationPrefix + "/processors.inc
 
 // AnnoProcessorsExclude returns the annotation key for processor exclude filter.
 func AnnoProcessorsExclude() string { return annotationPrefix + "/processors.exclude" }
+
+// AnnoExcludeContainers returns the annotation key for per-container opt-out.
+func AnnoExcludeContainers() string { return annotationPrefix + "/exclude-containers" }
 
 // AnnotationPrefix returns the configured annotation prefix.
 func AnnotationPrefix() string { return annotationPrefix }

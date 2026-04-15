@@ -33,11 +33,12 @@ pkg/
 ## Configuration
 
 Environment-driven via constants in `internal/config/constants.go`. Pod opt-in via annotations or labels:
-- `cainjekt.natron.io/enabled: "true"` — pod annotation or label (also works as namespace label)
+- `cainjekt.natron.io/enabled: "true"` — pod annotation, pod label, or namespace label (K8s API lookup with 1min cache)
 - `cainjekt.natron.io/processors.include` (optional CSV filter)
 - `cainjekt.natron.io/processors.exclude` (optional CSV filter)
+- `cainjekt.natron.io/exclude-containers: "name1,name2"` — skip specific containers (e.g. sidecars)
 
-Annotation prefix is configurable via `CAINJEKT_ANNOTATION_PREFIX`.
+Annotation prefix is configurable via `CAINJEKT_ANNOTATION_PREFIX`. Hook timeout via `CAINJEKT_HOOK_TIMEOUT_SEC` (default 5s).
 
 ## Deployment
 

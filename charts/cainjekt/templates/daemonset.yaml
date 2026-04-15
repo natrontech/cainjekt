@@ -30,8 +30,12 @@ spec:
       {{- end }}
     spec:
       serviceAccountName: {{ include "cainjekt.serviceAccountName" . }}
+      {{- if .Values.hostPID }}
       hostPID: true
+      {{- end }}
+      {{- if .Values.hostNetwork }}
       hostNetwork: true
+      {{- end }}
       {{- with .Values.priorityClassName }}
       priorityClassName: {{ . }}
       {{- end }}
@@ -83,6 +87,8 @@ spec:
               value: {{ .Values.annotationPrefix | quote }}
             - name: CAINJEKT_LOG_LEVEL
               value: {{ .Values.logLevel | quote }}
+            - name: CAINJEKT_HOOK_TIMEOUT_SEC
+              value: {{ .Values.hookTimeoutSeconds | quote }}
             - name: NODE_NAME
               valueFrom:
                 fieldRef:

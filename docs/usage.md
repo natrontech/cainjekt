@@ -68,7 +68,17 @@ metadata:
     cainjekt.natron.io/enabled: "true"
 ```
 
-Pods in this namespace will be injected unless they explicitly opt out. Pod-level annotations take precedence over namespace labels.
+Pods in this namespace will be injected unless they explicitly opt out. Pod-level annotations take precedence over namespace labels. The namespace label is checked via the Kubernetes API (cached for 1 minute).
+
+### Excluding Specific Containers
+
+To skip injection for sidecars or other containers within an injected pod:
+
+```yaml
+annotations:
+  cainjekt.natron.io/enabled: "true"
+  cainjekt.natron.io/exclude-containers: "istio-proxy,linkerd-proxy"
+```
 
 ### Custom Annotation Prefix
 
@@ -221,7 +231,8 @@ Common causes: invalid CA bundle (check PEM format), NRI socket issues (check co
 | Scenario | Works? | Details |
 |----------|--------|---------|
 | Standard Linux distros | Yes | Debian, Ubuntu, Alpine, RHEL, Fedora, Arch, openSUSE |
-| Java apps | Yes | `JAVA_TOOL_OPTIONS` with PEM trust store (JDK 18+) |
+| Java apps (JDK 18+) | Yes | `JAVA_TOOL_OPTIONS` with `-Djavax.net.ssl.trustStoreType=PEM` |
+| Java apps (JDK < 18) | No | PEM trust store type not supported; would need JKS keystore manipulation |
 | Node.js apps | Yes | `NODE_EXTRA_CA_CERTS` |
 | Python apps | Yes | `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE` |
 | Ruby apps | Yes | `SSL_CERT_FILE` |

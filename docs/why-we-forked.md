@@ -73,7 +73,9 @@ The core architecture is unchanged — we kept the three-phase pipeline, the pro
 |---------|--------|-------|
 | Deployment | Kustomize only | Helm chart + kustomize |
 | Annotation prefix | Hardcoded `cainjekt.io` | Configurable (default `cainjekt.natron.io`) |
-| Namespace opt-in | Per-pod only | Per-pod annotation + namespace label |
+| Namespace opt-in | Per-pod only | Per-pod annotation + namespace label (K8s API lookup with 1min cache) |
+| Container opt-out | Not supported | `exclude-containers` annotation for sidecars |
+| Host network/PID | Required | Not required (removed, configurable) |
 | Helm: ServiceMonitor | No | Yes |
 | Helm: PodDisruptionBudget | No | Yes |
 | Helm: PrometheusRule | No | Yes |
