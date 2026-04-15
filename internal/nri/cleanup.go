@@ -74,7 +74,7 @@ func (c *orphanCleaner) sweep() {
 			c.log.Warn("orphan cleanup: failed to remove", "dir", dir, "error", err)
 			continue
 		}
-		c.metrics.OrphansCleaned.Add(1)
+		c.metrics.OrphansCleaned.Inc()
 		c.log.Info("orphan cleanup: removed stale CA directory", "dir", name)
 	}
 }

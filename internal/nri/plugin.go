@@ -43,7 +43,7 @@ func Run(log *slog.Logger, args []string) error {
 		return err
 	}
 
-	metrics := &Metrics{}
+	metrics := newMetrics()
 	p := &Plugin{log: log, metrics: metrics}
 
 	opts := []stub.Option{stub.WithOnClose(p.onClose)}
@@ -116,11 +116,11 @@ func (p *Plugin) CreateContainer(
 	p.log.Info("create container", "namespace", pod.GetNamespace(), "pod", pod.GetName(), "container", ctr.GetName())
 
 	if !shouldInject(pod) {
-		p.metrics.SkippedTotal.Add(1)
+		p.metrics.SkippedTotal.Inc()
 		return nil, nil, nil
 	}
 
-	p.metrics.InjectionsTotal.Add(1)
+	p.metrics.InjectionsTotal.Inc()
 
 	// Use env var if set (for DaemonSet deployment), otherwise use os.Executable()
 	self := getenvOr(config.EnvPluginBinaryPath, "")
@@ -128,7 +128,7 @@ func (p *Plugin) CreateContainer(
 		var err error
 		self, err = os.Executable()
 		if err != nil {
-			p.metrics.InjectionsErrors.Add(1)
+			p.metrics.InjectionsErrors.Inc()
 			return nil, nil, fmt.Errorf("failed to determine plugin binary path: %w", err)
 		}
 	}
@@ -137,7 +137,7 @@ func (p *Plugin) CreateContainer(
 	caFileForHook, err := stageDynamicCAFile(sourceCAFile, dynamicCARoot(), ctr)
 	if err != nil {
 		_ = cleanupDynamicCAFile(dynamicCARoot(), ctr)
-		p.metrics.InjectionsErrors.Add(1)
+		p.metrics.InjectionsErrors.Inc()
 		return nil, nil, err
 	}
 
@@ -145,7 +145,7 @@ func (p *Plugin) CreateContainer(
 	key, _ := containerCAKey(ctr)
 	if key != "" {
 		p.tracked.Store(key, struct{}{})
-		p.metrics.ActiveContainers.Add(1)
+		p.metrics.ActiveContainers.Inc()
 	}
 
 	hook := &api.Hook{
@@ -194,16 +194,16 @@ func (p *Plugin) RemoveContainer(_ context.Context, pod *api.PodSandbox, ctr *ap
 	key, _ := containerCAKey(ctr)
 	if key != "" {
 		if _, loaded := p.tracked.LoadAndDelete(key); loaded {
-			p.metrics.ActiveContainers.Add(-1)
+			p.metrics.ActiveContainers.Dec()
 		}
 	}
 
 	if !shouldInject(pod) {
 		return nil
 	}
-	p.metrics.CleanupsTotal.Add(1)
+	p.metrics.CleanupsTotal.Inc()
 	if err := cleanupDynamicCAFile(dynamicCARoot(), ctr); err != nil {
-		p.metrics.CleanupsErrors.Add(1)
+		p.metrics.CleanupsErrors.Inc()
 		p.log.Warn("failed to cleanup dynamic CA bundle", "error", err)
 	}
 	return nil

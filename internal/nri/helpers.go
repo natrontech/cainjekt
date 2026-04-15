@@ -14,7 +14,7 @@ func newPlugin(log *slog.Logger) *Plugin {
 	if log == nil {
 		log = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
-	return &Plugin{log: log, metrics: &Metrics{}}
+	return &Plugin{log: log, metrics: newMetrics()}
 }
 
 // shouldInject checks pod and namespace annotations for the opt-in annotation.

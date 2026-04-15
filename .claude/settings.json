@@ -1,3 +1,47 @@
 {
-  "$schema": "https://json.schemastore.org/claude-code-settings.json"
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(go *)",
+      "Bash(make *)",
+      "Bash(make)",
+      "Bash(golangci-lint *)",
+      "Bash(helm *)",
+      "Bash(kubectl *)",
+      "Bash(kind *)",
+      "Bash(docker *)",
+      "Bash(gh *)",
+      "Bash(git *)",
+      "Bash(ls *)",
+      "Bash(ls)",
+      "Bash(cat *)",
+      "Bash(jq *)",
+      "Bash(GOCACHE=* go *)",
+      "Bash(CAINJEKT_* go *)",
+      "Bash(CGO_ENABLED=* go *)",
+      "Read",
+      "Edit",
+      "Write",
+      "Glob",
+      "Grep"
+    ],
+    "deny": [
+      "Bash(rm -rf /)",
+      "Bash(rm -rf ~)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "jq -r '.tool_input.file_path // .tool_response.filePath' | { read -r f; case \"$f\" in *.go) gofmt -w \"$f\" ;; esac; } 2>/dev/null || true",
+            "statusMessage": "Formatting Go file..."
+          }
+        ]
+      }
+    ]
+  }
 }

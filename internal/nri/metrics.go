@@ -1,46 +1,80 @@
 package nri
 
 import (
-	"sync"
-	"sync/atomic"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 )
 
-// Metrics tracks injection statistics for the Prometheus endpoint.
+// Metrics holds all Prometheus metrics for cainjekt.
 type Metrics struct {
-	InjectionsTotal   atomic.Int64
-	InjectionsErrors  atomic.Int64
-	SkippedTotal      atomic.Int64
-	CleanupsTotal     atomic.Int64
-	CleanupsErrors    atomic.Int64
-	OrphansCleaned    atomic.Int64
-	ActiveContainers  atomic.Int64
-	processorDetected sync.Map // map[string]*atomic.Int64
-	processorApplied  sync.Map // map[string]*atomic.Int64
+	Registry          *prometheus.Registry
+	InjectionsTotal   prometheus.Counter
+	InjectionsErrors  prometheus.Counter
+	SkippedTotal      prometheus.Counter
+	CleanupsTotal     prometheus.Counter
+	CleanupsErrors    prometheus.Counter
+	OrphansCleaned    prometheus.Counter
+	ActiveContainers  prometheus.Gauge
+	ProcessorDetected *prometheus.CounterVec
+	ProcessorApplied  *prometheus.CounterVec
 }
 
-// IncProcessorDetected increments the detection count for a processor.
-func (m *Metrics) IncProcessorDetected(name string) {
-	v, _ := m.processorDetected.LoadOrStore(name, &atomic.Int64{})
-	v.(*atomic.Int64).Add(1)
-}
+func newMetrics() *Metrics {
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+	reg.MustRegister(collectors.NewGoCollector())
 
-// IncProcessorApplied increments the application count for a processor.
-func (m *Metrics) IncProcessorApplied(name string) {
-	v, _ := m.processorApplied.LoadOrStore(name, &atomic.Int64{})
-	v.(*atomic.Int64).Add(1)
-}
+	m := &Metrics{
+		Registry: reg,
+		InjectionsTotal: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "cainjekt_injections_total",
+			Help: "Total CA injection attempts.",
+		}),
+		InjectionsErrors: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "cainjekt_injections_errors_total",
+			Help: "Total CA injection errors.",
+		}),
+		SkippedTotal: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "cainjekt_skipped_total",
+			Help: "Containers skipped (no opt-in annotation).",
+		}),
+		CleanupsTotal: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "cainjekt_cleanups_total",
+			Help: "Total dynamic CA cleanups on container removal.",
+		}),
+		CleanupsErrors: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "cainjekt_cleanups_errors_total",
+			Help: "Total cleanup errors.",
+		}),
+		OrphansCleaned: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "cainjekt_orphans_cleaned_total",
+			Help: "Orphaned CA directories cleaned up.",
+		}),
+		ActiveContainers: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "cainjekt_active_containers",
+			Help: "Currently tracked containers with CA injection.",
+		}),
+		ProcessorDetected: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "cainjekt_processor_detected_total",
+			Help: "Times a processor was detected as applicable.",
+		}, []string{"processor"}),
+		ProcessorApplied: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "cainjekt_processor_applied_total",
+			Help: "Times a processor was successfully applied.",
+		}, []string{"processor"}),
+	}
 
-// ProcessorStats returns a snapshot of per-processor detection and application counts.
-func (m *Metrics) ProcessorStats() (detected, applied map[string]int64) {
-	detected = map[string]int64{}
-	applied = map[string]int64{}
-	m.processorDetected.Range(func(key, value any) bool {
-		detected[key.(string)] = value.(*atomic.Int64).Load()
-		return true
-	})
-	m.processorApplied.Range(func(key, value any) bool {
-		applied[key.(string)] = value.(*atomic.Int64).Load()
-		return true
-	})
-	return detected, applied
+	reg.MustRegister(
+		m.InjectionsTotal,
+		m.InjectionsErrors,
+		m.SkippedTotal,
+		m.CleanupsTotal,
+		m.CleanupsErrors,
+		m.OrphansCleaned,
+		m.ActiveContainers,
+		m.ProcessorDetected,
+		m.ProcessorApplied,
+	)
+
+	return m
 }
