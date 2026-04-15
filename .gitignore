@@ -1,1 +1,24 @@
+# Build artifacts
 bin/
+*.test
+*.out
+
+# OS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Go
+vendor/
+
+# Helm
+charts/cainjekt/*.tgz
+
+# Debug
+*.prof
+__debug_bin*

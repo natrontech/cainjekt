@@ -1,3 +1,4 @@
+// Package hook implements the OCI CreateRuntime hook for CA injection.
 package hook
 
 import (
@@ -13,6 +14,7 @@ import (
 	"github.com/tsuzu/cainjekt/internal/util/oci"
 )
 
+// Run executes the OCI hook phase: detects processors, applies CA injection, and persists wrapper context.
 func Run(log *slog.Logger) error {
 	mode := strings.ToLower(strings.TrimSpace(os.Getenv(config.EnvHookMode)))
 	if mode != config.ModeCreateRT && mode != config.ModeCreateCtr {
@@ -40,8 +42,8 @@ func Run(log *slog.Logger) error {
 	}
 
 	all := processors.Default()
-	include := processors.ParseCSV(ctx.Annotations[config.AnnoProcessorsInclude])
-	exclude := processors.ParseCSV(ctx.Annotations[config.AnnoProcessorsExclude])
+	include := processors.ParseCSV(ctx.Annotations[config.AnnoProcessorsInclude()])
+	exclude := processors.ParseCSV(ctx.Annotations[config.AnnoProcessorsExclude()])
 	filtered := processors.FilterByNames(all, include, exclude)
 
 	detected := runProcessors(ctx, filtered)
@@ -80,11 +82,21 @@ func runProcessors(ctx *hookapi.Context, list []hookapi.Processor) []hookctx.Det
 			Reason:     d.Detect.Reason,
 		})
 		if !d.Detect.Applicable {
-			ctx.AddResult(hookapi.ProcessorResult{Name: d.Processor.Name(), Category: d.Processor.Category(), Skipped: true, Reason: d.Detect.Reason})
+			ctx.AddResult(hookapi.ProcessorResult{
+				Name:     d.Processor.Name(),
+				Category: d.Processor.Category(),
+				Skipped:  true,
+				Reason:   d.Detect.Reason,
+			})
 			continue
 		}
 		err := d.Processor.Apply(ctx)
-		ctx.AddResult(hookapi.ProcessorResult{Name: d.Processor.Name(), Category: d.Processor.Category(), Applied: err == nil, Err: err})
+		ctx.AddResult(hookapi.ProcessorResult{
+			Name:     d.Processor.Name(),
+			Category: d.Processor.Category(),
+			Applied:  err == nil,
+			Err:      err,
+		})
 	}
 	return persisted
 }

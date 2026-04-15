@@ -1,3 +1,4 @@
+// Package python provides a Python CA injection processor.
 package python
 
 import (
@@ -28,6 +29,7 @@ var pythonBinaryCandidates = []string{
 
 type processor struct{}
 
+// New returns a Python CA injection processor.
 func New() hookapi.Processor {
 	return &processor{}
 }

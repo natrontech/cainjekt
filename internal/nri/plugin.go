@@ -1,3 +1,4 @@
+// Package nri implements the containerd NRI plugin for CA certificate injection.
 package nri
 
 import (
@@ -12,11 +13,13 @@ import (
 	"github.com/tsuzu/cainjekt/internal/config"
 )
 
+// Plugin implements the NRI stub interface for CA certificate injection.
 type Plugin struct {
 	stub stub.Stub
 	log  *slog.Logger
 }
 
+// Run starts the NRI plugin and blocks until shutdown.
 func Run(log *slog.Logger, args []string) error {
 	var (
 		pluginName string
@@ -55,12 +58,16 @@ func Run(log *slog.Logger, args []string) error {
 	return nil
 }
 
+// PostCreateContainer logs container creation events.
 func (p *Plugin) PostCreateContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) error {
 	p.log.Info("post create container", "namespace", pod.GetNamespace(), "pod", pod.GetName(), "container", ctr.GetName())
 	return nil
 }
 
-func (p *Plugin) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) (*api.ContainerAdjustment, []*api.ContainerUpdate, error) {
+// CreateContainer intercepts container creation to inject CA certificates.
+func (p *Plugin) CreateContainer(
+	_ context.Context, pod *api.PodSandbox, ctr *api.Container,
+) (*api.ContainerAdjustment, []*api.ContainerUpdate, error) {
 	p.log.Info("create container", "namespace", pod.GetNamespace(), "pod", pod.GetName(), "container", ctr.GetName())
 
 	if !shouldInject(pod) {
@@ -91,6 +98,7 @@ func (p *Plugin) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *ap
 			config.EnvCAFile + "=" + caFileForHook,
 			config.EnvFailPolicy + "=" + config.FailPolicyOpen,
 			config.EnvHookContextFile + "=" + config.HookContextFile,
+			config.EnvAnnotationPrefix + "=" + config.AnnotationPrefix(),
 		},
 		Timeout: api.Int(config.DefaultHookTimeoutSec),
 	}
@@ -113,6 +121,7 @@ func (p *Plugin) CreateContainer(_ context.Context, pod *api.PodSandbox, ctr *ap
 	return adjustment, nil, nil
 }
 
+// RemoveContainer cleans up per-container dynamic CA files.
 func (p *Plugin) RemoveContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) error {
 	p.log.Info("removed container", "namespace", pod.GetNamespace(), "pod", pod.GetName(), "container", ctr.GetName())
 	if !shouldInject(pod) {

@@ -1,3 +1,4 @@
+// Package nodejs provides a Node.js CA injection processor.
 package nodejs
 
 import (
@@ -25,6 +26,7 @@ var nodeBinaryCandidates = []string{
 
 type processor struct{}
 
+// New returns a Node.js CA injection processor.
 func New() hookapi.Processor {
 	return &processor{}
 }

@@ -21,7 +21,7 @@ func TestCreateContainerStagesDynamicCAForHook(t *testing.T) {
 	pod := &api.PodSandbox{
 		Namespace:   "default",
 		Name:        "pod-a",
-		Annotations: map[string]string{config.AnnoEnabled: "true"},
+		Annotations: map[string]string{config.AnnoEnabled(): "true"},
 	}
 	ctr := &api.Container{
 		Id:   "containerd://abcd1234",
@@ -75,7 +75,7 @@ func TestCreateContainerReturnsErrorWhenDynamicCAStagingFails(t *testing.T) {
 	pod := &api.PodSandbox{
 		Namespace:   "default",
 		Name:        "pod-b",
-		Annotations: map[string]string{config.AnnoEnabled: "true"},
+		Annotations: map[string]string{config.AnnoEnabled(): "true"},
 	}
 	ctr := &api.Container{
 		Id:   "containerd://efgh5678",
@@ -102,7 +102,7 @@ func TestRemoveContainerCleansDynamicCADirectory(t *testing.T) {
 	pod := &api.PodSandbox{
 		Namespace:   "default",
 		Name:        "pod-c",
-		Annotations: map[string]string{config.AnnoEnabled: "true"},
+		Annotations: map[string]string{config.AnnoEnabled(): "true"},
 	}
 	ctr := &api.Container{
 		Id:   "containerd://ijkl9012",
@@ -137,7 +137,7 @@ func TestCreateContainerReturnsErrorWhenContainerIDEmpty(t *testing.T) {
 	pod := &api.PodSandbox{
 		Namespace:   "default",
 		Name:        "pod-d",
-		Annotations: map[string]string{config.AnnoEnabled: "true"},
+		Annotations: map[string]string{config.AnnoEnabled(): "true"},
 	}
 	ctr := &api.Container{
 		Id:   "",

@@ -1,3 +1,4 @@
+// Package app routes cainjekt execution to the appropriate runtime mode.
 package app
 
 import (
@@ -12,6 +13,7 @@ import (
 	"github.com/tsuzu/cainjekt/internal/runtime/wrapper"
 )
 
+// Run detects the runtime mode and dispatches to the appropriate handler.
 func Run(log *slog.Logger, args []string) error {
 	if strings.TrimSpace(os.Getenv(config.EnvHookMode)) != "" {
 		if err := hook.Run(log); err != nil {

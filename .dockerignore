@@ -4,7 +4,7 @@
 
 # Documentation
 *.md
-AGENTS.md
+LICENSE
 
 # Build artifacts
 bin/
@@ -24,9 +24,17 @@ integration/
 # CI/CD
 .github/
 
-# Kubernetes manifests
+# Kubernetes manifests and Helm chart (not needed in image)
 deploy/
+charts/
 
-# Misc
+# Development tooling
 hack/
 Makefile
+.pre-commit-config.yaml
+.golangci.yml
+
+# Claude Code config
+.claude/
+CLAUDE.md
+CHANGELOG.md

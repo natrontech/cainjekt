@@ -1,3 +1,4 @@
+// Package hookctx handles persistence of hook state between the hook and wrapper phases.
 package hookctx
 
 import (
@@ -12,6 +13,7 @@ import (
 	"github.com/tsuzu/cainjekt/pkg/fsx"
 )
 
+// DetectedProcessor records a processor's detection result for persistence.
 type DetectedProcessor struct {
 	Name       string `json:"name"`
 	Category   string `json:"category"`
@@ -20,6 +22,7 @@ type DetectedProcessor struct {
 	Reason     string `json:"reason,omitempty"`
 }
 
+// PersistedContext is the serializable subset of the hook context.
 type PersistedContext struct {
 	Mode        string            `json:"mode,omitempty"`
 	Bundle      string            `json:"bundle,omitempty"`
@@ -29,11 +32,13 @@ type PersistedContext struct {
 	Facts       map[string]string `json:"facts,omitempty"`
 }
 
+// State holds the persisted hook context and detected processors.
 type State struct {
 	Context  PersistedContext    `json:"context"`
 	Detected []DetectedProcessor `json:"detected,omitempty"`
 }
 
+// NewStateFromContext creates a State from the current hook context.
 func NewStateFromContext(ctx *hookapi.Context, detected []DetectedProcessor) State {
 	ann := make(map[string]string, len(ctx.Annotations))
 	for k, v := range ctx.Annotations {
@@ -56,6 +61,7 @@ func NewStateFromContext(ctx *hookapi.Context, detected []DetectedProcessor) Sta
 	}
 }
 
+// ToHookContext reconstructs a hook context from persisted state.
 func (s State) ToHookContext() *hookapi.Context {
 	facts := map[hookapi.FactKey]string{}
 	for k, v := range s.Context.Facts {
@@ -71,6 +77,7 @@ func (s State) ToHookContext() *hookapi.Context {
 	}
 }
 
+// Write persists the hook state to the container rootfs.
 func Write(rootfs string, state State) error {
 	containerPath := contextFilePath()
 	hostPath := pathInRootfs(rootfs, containerPath)
@@ -91,6 +98,7 @@ func Write(rootfs string, state State) error {
 	return nil
 }
 
+// Read loads the persisted hook state from the container filesystem.
 func Read() (State, error) {
 	p := contextFilePath()
 	b, err := os.ReadFile(p)

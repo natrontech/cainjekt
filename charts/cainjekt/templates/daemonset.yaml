@@ -1,0 +1,126 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "cainjekt.fullname" . }}
+  namespace: {{ include "cainjekt.namespace" . }}
+  labels:
+    {{- include "cainjekt.labels" . | nindent 4 }}
+  {{- with .Values.commonAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  selector:
+    matchLabels:
+      {{- include "cainjekt.selectorLabels" . | nindent 6 }}
+  {{- with .Values.updateStrategy }}
+  updateStrategy:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        {{- include "cainjekt.selectorLabels" . | nindent 8 }}
+        {{- with .Values.commonLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "cainjekt.serviceAccountName" . }}
+      hostPID: true
+      hostNetwork: true
+      {{- with .Values.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      initContainers:
+        - name: install-plugin-binary
+          image: "{{ .Values.installerImage.repository }}:{{ include "cainjekt.installerImageTag" . }}"
+          imagePullPolicy: {{ .Values.installerImage.pullPolicy }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              mkdir -p /host-bin/bin
+              install -m 0755 /cainjekt /host-bin/bin/cainjekt
+          volumeMounts:
+            - name: plugin-install-dir
+              mountPath: /host-bin
+      containers:
+        - name: cainjekt
+          image: "{{ .Values.image.repository }}:{{ include "cainjekt.imageTag" . }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            privileged: true
+          env:
+            - name: CAINJEKT_CA_FILE
+              value: /etc/cainjekt/ca-bundle.pem
+            - name: CAINJEKT_DYNAMIC_CA_ROOT
+              value: /run/cainjekt/containers
+            - name: CAINJEKT_PLUGIN_BINARY_PATH
+              value: /opt/cainjekt/bin/cainjekt
+            - name: CAINJEKT_FAIL_POLICY
+              value: {{ .Values.failPolicy | quote }}
+            - name: CAINJEKT_ANNOTATION_PREFIX
+              value: {{ .Values.annotationPrefix | quote }}
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          args:
+            - --name={{ .Values.plugin.name }}
+            - --idx={{ .Values.plugin.index }}
+          volumeMounts:
+            - name: nri-socket
+              mountPath: /var/run/nri
+            - name: ca-bundle
+              mountPath: /etc/cainjekt
+              readOnly: true
+            - name: dynamic-ca-root
+              mountPath: /run/cainjekt
+            - name: plugin-install-dir
+              mountPath: /opt/cainjekt
+              readOnly: true
+            - name: host-root
+              mountPath: /host
+              readOnly: true
+              mountPropagation: HostToContainer
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      volumes:
+        - name: nri-socket
+          hostPath:
+            path: /var/run/nri
+            type: DirectoryOrCreate
+        - name: ca-bundle
+          configMap:
+            name: {{ include "cainjekt.caBundleConfigMapName" . }}
+            optional: false
+        - name: dynamic-ca-root
+          hostPath:
+            path: /run/cainjekt
+            type: DirectoryOrCreate
+        - name: plugin-install-dir
+          hostPath:
+            path: /opt/cainjekt
+            type: DirectoryOrCreate
+        - name: host-root
+          hostPath:
+            path: /
+            type: Directory

@@ -18,7 +18,7 @@ func newPlugin(log *slog.Logger) *Plugin {
 }
 
 func shouldInject(pod *api.PodSandbox) bool {
-	return strings.EqualFold(pod.GetAnnotations()[config.AnnoEnabled], "true")
+	return strings.EqualFold(pod.GetAnnotations()[config.AnnoEnabled()], "true")
 }
 
 func hasEnv(env []string, key string) bool {

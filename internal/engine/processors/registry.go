@@ -1,3 +1,4 @@
+// Package processors manages the processor registry for CA injection.
 package processors
 
 import (
@@ -47,6 +48,7 @@ func Register(p hookapi.Processor) {
 	byName[name] = p
 }
 
+// Default returns a copy of all registered processors.
 func Default() []hookapi.Processor {
 	registryMu.RLock()
 	defer registryMu.RUnlock()
@@ -56,6 +58,7 @@ func Default() []hookapi.Processor {
 	return out
 }
 
+// ByName looks up a processor by name (case-insensitive).
 func ByName(name string) (hookapi.Processor, bool) {
 	registryMu.RLock()
 	p, ok := byName[strings.ToLower(strings.TrimSpace(name))]
@@ -66,6 +69,7 @@ func ByName(name string) (hookapi.Processor, bool) {
 	return p, true
 }
 
+// ParseCSV splits a comma-separated string into a set of lowercase names.
 func ParseCSV(raw string) map[string]struct{} {
 	out := map[string]struct{}{}
 	for _, v := range strings.Split(raw, ",") {
@@ -78,6 +82,7 @@ func ParseCSV(raw string) map[string]struct{} {
 	return out
 }
 
+// FilterByNames returns processors matching the include set (if non-empty) minus the exclude set.
 func FilterByNames(all []hookapi.Processor, include, exclude map[string]struct{}) []hookapi.Processor {
 	var out []hookapi.Processor
 	for _, p := range all {
@@ -95,6 +100,7 @@ func FilterByNames(all []hookapi.Processor, include, exclude map[string]struct{}
 	return out
 }
 
+// DetectSorted runs detection on all processors and returns results sorted by priority (highest first).
 func DetectSorted(ctx *hookapi.Context, list []hookapi.Processor) []Detected {
 	out := make([]Detected, 0, len(list))
 	for _, p := range list {
@@ -106,6 +112,7 @@ func DetectSorted(ctx *hookapi.Context, list []hookapi.Processor) []Detected {
 	return out
 }
 
+// Detected pairs a processor with its detection result.
 type Detected struct {
 	Processor hookapi.Processor
 	Detect    hookapi.DetectResult

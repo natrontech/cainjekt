@@ -1,0 +1,111 @@
+## @section Common parameters
+
+## @param nameOverride String to partially override names
+nameOverride: ""
+
+## @param fullnameOverride String to fully override names
+fullnameOverride: ""
+
+## @param namespaceOverride Deploy to a different namespace than the release namespace
+namespaceOverride: ""
+
+## @param commonLabels Labels to add to all deployed objects
+commonLabels: {}
+
+## @param commonAnnotations Annotations to add to all deployed objects
+commonAnnotations: {}
+
+## @section cainjekt image parameters
+
+image:
+  ## @param image.repository cainjekt image repository
+  repository: ghcr.io/natrontech/cainjekt
+  ## @param image.tag cainjekt image tag (defaults to appVersion)
+  tag: ""
+  ## @param image.pullPolicy Image pull policy
+  pullPolicy: IfNotPresent
+
+installerImage:
+  ## @param installerImage.repository Installer init container image repository
+  repository: ghcr.io/natrontech/cainjekt-installer
+  ## @param installerImage.tag Installer image tag (defaults to appVersion)
+  tag: ""
+  ## @param installerImage.pullPolicy Image pull policy
+  pullPolicy: IfNotPresent
+
+## @param imagePullSecrets Image pull secrets
+imagePullSecrets: []
+
+## @section cainjekt configuration
+
+## @param caBundle PEM-encoded CA certificate bundle to inject into containers
+## Provide your CA certificates here. All certificates will be merged into container trust stores.
+caBundle: ""
+
+## @param caBundleExistingConfigMap Use an existing ConfigMap for the CA bundle instead of creating one
+## The ConfigMap must have a key named `ca-bundle.pem`
+caBundleExistingConfigMap: ""
+
+plugin:
+  ## @param plugin.name NRI plugin name
+  name: cainjekt
+  ## @param plugin.index NRI plugin index (priority)
+  index: "10"
+
+## @param annotationPrefix Annotation prefix for pod opt-in (e.g. "cainjekt.natron.io")
+## Pods use `<prefix>/enabled: "true"` to opt in to CA injection.
+annotationPrefix: "cainjekt.natron.io"
+
+## @param failPolicy Policy when hook fails: "fail-open" (default) or "fail-closed"
+failPolicy: "fail-open"
+
+## @section DaemonSet parameters
+
+## @param updateStrategy.type DaemonSet update strategy
+## @param updateStrategy.rollingUpdate.maxUnavailable Max unavailable during rolling update
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+
+## @param tolerations Tolerations for pod scheduling (defaults to tolerate all taints)
+tolerations:
+  - operator: Exists
+    effect: NoSchedule
+  - operator: Exists
+    effect: NoExecute
+
+## @param nodeSelector Node selector for pod scheduling
+nodeSelector: {}
+
+## @param affinity Affinity rules for pod scheduling
+affinity: {}
+
+## @param priorityClassName Priority class name
+priorityClassName: system-node-critical
+
+resources:
+  ## @param resources.requests.cpu CPU request
+  ## @param resources.requests.memory Memory request
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  ## @param resources.limits.cpu CPU limit
+  ## @param resources.limits.memory Memory limit
+  limits:
+    cpu: 100m
+    memory: 128Mi
+
+## @section RBAC parameters
+
+serviceAccount:
+  ## @param serviceAccount.create Create a ServiceAccount
+  create: true
+  ## @param serviceAccount.name ServiceAccount name (generated if not set)
+  name: ""
+  ## @param serviceAccount.annotations Annotations for the ServiceAccount
+  annotations: {}
+
+rbac:
+  ## @param rbac.create Create ClusterRole and ClusterRoleBinding
+  create: true

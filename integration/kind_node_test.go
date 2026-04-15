@@ -119,7 +119,7 @@ metadata:
   name: %s
   namespace: %s
   annotations:
-    cainjekt.io/enabled: "true"
+    cainjekt.natron.io/enabled: "true"
 spec:
   restartPolicy: Never
   containers:
@@ -143,7 +143,7 @@ metadata:
   name: %s
   namespace: %s
   annotations:
-    cainjekt.io/enabled: "false"
+    cainjekt.natron.io/enabled: "false"
 spec:
   restartPolicy: Never
   containers:

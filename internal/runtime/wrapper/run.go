@@ -1,3 +1,4 @@
+// Package wrapper implements the container entrypoint wrapper for language-specific CA env vars.
 package wrapper
 
 import (
@@ -12,6 +13,7 @@ import (
 	"github.com/tsuzu/cainjekt/internal/runtime/hookctx"
 )
 
+// Run executes the wrapper phase: applies language-specific env vars and execs the original entrypoint.
 func Run() error {
 	if len(os.Args) < 2 {
 		return fmt.Errorf("wrapper requires original command in argv[1:]")

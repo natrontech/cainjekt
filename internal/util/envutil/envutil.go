@@ -1,7 +1,9 @@
+// Package envutil provides helpers for manipulating environment variable slices.
 package envutil
 
 import "strings"
 
+// Upsert sets or updates an environment variable in the given env slice.
 func Upsert(env []string, key, value string) []string {
 	prefix := key + "="
 	entry := prefix + value

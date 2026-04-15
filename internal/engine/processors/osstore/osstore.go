@@ -1,3 +1,4 @@
+// Package osstore provides OS-level CA trust store injection processors.
 package osstore
 
 import (
@@ -27,6 +28,7 @@ type processor struct {
 	fallback   bool
 }
 
+// NewDebian returns a processor for Debian/Ubuntu-based distributions.
 func NewDebian() hookapi.Processor {
 	return &processor{
 		name:       "os-debian",
@@ -38,6 +40,7 @@ func NewDebian() hookapi.Processor {
 	}
 }
 
+// NewRHEL returns a processor for RHEL/Fedora/CentOS-based distributions.
 func NewRHEL() hookapi.Processor {
 	return &processor{
 		name:       "os-rhel",
@@ -49,6 +52,7 @@ func NewRHEL() hookapi.Processor {
 	}
 }
 
+// NewOpenSUSE returns a processor for openSUSE/SLES-based distributions.
 func NewOpenSUSE() hookapi.Processor {
 	return &processor{
 		name:       "os-opensuse",
@@ -60,6 +64,7 @@ func NewOpenSUSE() hookapi.Processor {
 	}
 }
 
+// NewAlpine returns a processor for Alpine Linux.
 func NewAlpine() hookapi.Processor {
 	return &processor{
 		name:       "os-alpine",
@@ -71,6 +76,7 @@ func NewAlpine() hookapi.Processor {
 	}
 }
 
+// NewArch returns a processor for Arch Linux.
 func NewArch() hookapi.Processor {
 	return &processor{
 		name:       "os-arch",
@@ -82,6 +88,7 @@ func NewArch() hookapi.Processor {
 	}
 }
 
+// NewFallback returns a processor that tries common trust store paths when the distro is unknown.
 func NewFallback() hookapi.Processor {
 	return &processor{
 		name:   "os-fallback",
@@ -281,9 +288,7 @@ func parseOSRelease(r io.Reader) (osRelease, error) {
 		case "ID":
 			out.id = strings.ToLower(val)
 		case "ID_LIKE":
-			for _, token := range strings.Fields(strings.ToLower(val)) {
-				out.idLike = append(out.idLike, token)
-			}
+			out.idLike = append(out.idLike, strings.Fields(strings.ToLower(val))...)
 		}
 	}
 	if err := sc.Err(); err != nil {

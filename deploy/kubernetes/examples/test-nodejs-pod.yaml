@@ -3,7 +3,7 @@ kind: Pod
 metadata:
   name: test-nodejs-ca-injection
   annotations:
-    cainjekt.io/enabled: "true"
+    cainjekt.natron.io/enabled: "true"
 spec:
   containers:
   - name: nodejs

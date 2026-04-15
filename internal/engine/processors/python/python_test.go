@@ -7,6 +7,8 @@ import (
 	"github.com/tsuzu/cainjekt/internal/testutil"
 )
 
+const testIndividualCAPath = "/usr/local/share/ca-certificates/cainjekt.crt"
+
 func TestDetectApplicableWhenPythonExists(t *testing.T) {
 	t.Parallel()
 
@@ -50,17 +52,17 @@ func TestApplyWrapperSetsPythonEnvVars(t *testing.T) {
 		Env:   []string{"PATH=/usr/bin"},
 		Facts: hookapi.NewMapFactStore(),
 	}
-	ctx.Facts.Set(hookapi.FactIndividualCAPath, "/usr/local/share/ca-certificates/cainjekt.crt")
+	ctx.Facts.Set(hookapi.FactIndividualCAPath, testIndividualCAPath)
 
 	p := New().(*processor)
 	if err := p.ApplyWrapper(ctx); err != nil {
 		t.Fatalf("ApplyWrapper() error = %v", err)
 	}
 
-	if got := testutil.EnvValue(ctx.Env, envSSLCAFile); got != "/usr/local/share/ca-certificates/cainjekt.crt" {
+	if got := testutil.EnvValue(ctx.Env, envSSLCAFile); got != testIndividualCAPath {
 		t.Fatalf("env %q mismatch: got=%q", envSSLCAFile, got)
 	}
-	if got := testutil.EnvValue(ctx.Env, envRequestsCABundle); got != "/usr/local/share/ca-certificates/cainjekt.crt" {
+	if got := testutil.EnvValue(ctx.Env, envRequestsCABundle); got != testIndividualCAPath {
 		t.Fatalf("env %q mismatch: got=%q", envRequestsCABundle, got)
 	}
 }
@@ -75,17 +77,17 @@ func TestApplyWrapperOverwritesExistingPythonEnvVars(t *testing.T) {
 		},
 		Facts: hookapi.NewMapFactStore(),
 	}
-	ctx.Facts.Set(hookapi.FactIndividualCAPath, "/usr/local/share/ca-certificates/cainjekt.crt")
+	ctx.Facts.Set(hookapi.FactIndividualCAPath, testIndividualCAPath)
 
 	p := New().(*processor)
 	if err := p.ApplyWrapper(ctx); err != nil {
 		t.Fatalf("ApplyWrapper() error = %v", err)
 	}
 
-	if got := testutil.EnvValue(ctx.Env, envSSLCAFile); got != "/usr/local/share/ca-certificates/cainjekt.crt" {
+	if got := testutil.EnvValue(ctx.Env, envSSLCAFile); got != testIndividualCAPath {
 		t.Fatalf("env %q mismatch: got=%q", envSSLCAFile, got)
 	}
-	if got := testutil.EnvValue(ctx.Env, envRequestsCABundle); got != "/usr/local/share/ca-certificates/cainjekt.crt" {
+	if got := testutil.EnvValue(ctx.Env, envRequestsCABundle); got != testIndividualCAPath {
 		t.Fatalf("env %q mismatch: got=%q", envRequestsCABundle, got)
 	}
 }
