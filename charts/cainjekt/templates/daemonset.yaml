@@ -21,9 +21,13 @@ spec:
     metadata:
       labels:
         {{- include "cainjekt.selectorLabels" . | nindent 8 }}
-        {{- with .Values.commonLabels }}
+        {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     spec:
       serviceAccountName: {{ include "cainjekt.serviceAccountName" . }}
       hostPID: true
