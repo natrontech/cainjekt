@@ -2,12 +2,19 @@ package nri
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"io"
 	"log/slog"
+	"math/big"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/containerd/nri/pkg/api"
 	"github.com/natrontech/cainjekt/internal/config"
@@ -159,9 +166,26 @@ func TestCreateContainerReturnsErrorWhenContainerIDEmpty(t *testing.T) {
 
 func writeTempSourceCA(t *testing.T) string {
 	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("GenerateKey: %v", err)
+	}
+	tpl := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "cainjekt-test-ca"},
+		NotBefore:             time.Now().Add(-1 * time.Hour),
+		NotAfter:              time.Now().Add(24 * time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign,
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tpl, tpl, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("CreateCertificate: %v", err)
+	}
+	content := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 	p := filepath.Join(t.TempDir(), "source-ca.pem")
-	content := "-----BEGIN CERTIFICATE-----\nTEST\n-----END CERTIFICATE-----\n"
-	if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
+	if err := os.WriteFile(p, content, 0o600); err != nil {
 		t.Fatalf("WriteFile(%q): %v", p, err)
 	}
 	return p

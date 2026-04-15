@@ -1,0 +1,46 @@
+{{- if .Values.prometheusRule.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "cainjekt.fullname" . }}
+  namespace: {{ include "cainjekt.namespace" . }}
+  labels:
+    {{- include "cainjekt.labels" . | nindent 4 }}
+    {{- with .Values.prometheusRule.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  groups:
+    - name: cainjekt
+      rules:
+        - alert: CainjektHighErrorRate
+          expr: |
+            (rate(cainjekt_injections_errors_total[5m]) / rate(cainjekt_injections_total[5m])) > 0.1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "cainjekt injection error rate is above 10%"
+            description: "{{ `{{ $value | humanizePercentage }}` }} of CA injections are failing on {{ `{{ $labels.instance }}` }}"
+        - alert: CainjektDaemonSetNotReady
+          expr: |
+            kube_daemonset_status_number_ready{daemonset="{{ include "cainjekt.fullname" . }}"} < kube_daemonset_status_desired_number_scheduled{daemonset="{{ include "cainjekt.fullname" . }}"}
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: "cainjekt DaemonSet has unavailable pods"
+            description: "Not all cainjekt pods are ready for more than 10 minutes"
+        - alert: CainjektOrphanAccumulation
+          expr: |
+            increase(cainjekt_orphans_cleaned_total[1h]) > 50
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "cainjekt is cleaning up many orphaned CA directories"
+            description: "{{ `{{ $value }}` }} orphaned CA directories cleaned in the last hour on {{ `{{ $labels.instance }}` }}"
+        {{- with .Values.prometheusRule.additionalRules }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+{{- end }}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/containerd/nri/pkg/api"
 	"github.com/natrontech/cainjekt/internal/config"
+	"github.com/natrontech/cainjekt/pkg/certs"
 	"github.com/natrontech/cainjekt/pkg/fsx"
 )
 
@@ -21,6 +22,9 @@ func stageDynamicCAFile(sourceCAFile, root string, ctr *api.Container) (string, 
 	content, err := os.ReadFile(sourceCAFile)
 	if err != nil {
 		return "", fmt.Errorf("failed to read source CA file %s: %w", sourceCAFile, err)
+	}
+	if err := certs.ValidatePEM(content); err != nil {
+		return "", fmt.Errorf("invalid CA bundle %s: %w", sourceCAFile, err)
 	}
 
 	targetDir, err := containerCADir(root, ctr)

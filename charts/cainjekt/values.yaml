@@ -129,6 +129,14 @@ serviceMonitor:
   ## @param serviceMonitor.labels Extra labels for the ServiceMonitor (e.g. release: prometheus)
   labels: {}
 
+prometheusRule:
+  ## @param prometheusRule.enabled Create PrometheusRule alerting rules
+  enabled: false
+  ## @param prometheusRule.labels Extra labels for the PrometheusRule
+  labels: {}
+  ## @param prometheusRule.additionalRules Additional custom alerting rules
+  additionalRules: []
+
 ## @section Disruption parameters
 
 podDisruptionBudget:
