@@ -77,6 +77,12 @@ hookTimeoutSeconds: 5
 
 ## @section DaemonSet parameters
 
+## @param hostNetwork Use host network (not required for NRI — Unix socket only)
+hostNetwork: false
+
+## @param hostPID Use host PID namespace (not required for NRI)
+hostPID: false
+
 ## @param updateStrategy.type DaemonSet update strategy
 ## @param updateStrategy.rollingUpdate.maxUnavailable Max unavailable during rolling update
 updateStrategy:
