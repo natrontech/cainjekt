@@ -37,21 +37,22 @@ data:
           "fieldConfig": {
             "defaults": {
               "color": { "mode": "palette-classic" },
-              "custom": { "fillOpacity": 20, "lineWidth": 2 }
+              "custom": { "fillOpacity": 20, "lineWidth": 2, "showPoints": "never" }
             },
             "overrides": [
               { "matcher": { "id": "byName", "options": "errors" }, "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }] }
             ]
           },
           "targets": [
-            { "expr": "sum(rate(cainjekt_injections_total[1m]))", "legendFormat": "total" },
-            { "expr": "sum(rate(cainjekt_injections_errors_total[1m]))", "legendFormat": "errors" }
+            { "expr": "sum(rate(cainjekt_injections_total[5m]))", "legendFormat": "total" },
+            { "expr": "sum(rate(cainjekt_injections_errors_total[5m]))", "legendFormat": "errors" },
+            { "expr": "sum(rate(cainjekt_skipped_total[5m]))", "legendFormat": "skipped" }
           ]
         },
         {
           "title": "Success Rate",
           "type": "gauge",
-          "gridPos": { "h": 4, "w": 3, "x": 10, "y": 1 },
+          "gridPos": { "h": 8, "w": 3, "x": 10, "y": 1 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
           "fieldConfig": {
             "defaults": {
@@ -70,6 +71,7 @@ data:
           "gridPos": { "h": 4, "w": 2, "x": 13, "y": 1 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
           "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "blue", "value": null }] } } },
+          "options": { "graphMode": "none" },
           "targets": [{ "expr": "sum(cainjekt_active_containers)", "legendFormat": "active" }]
         },
         {
@@ -78,6 +80,7 @@ data:
           "gridPos": { "h": 4, "w": 2, "x": 15, "y": 1 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
           "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }] } } },
+          "options": { "graphMode": "none" },
           "targets": [{ "expr": "sum(cainjekt_injections_total)" }]
         },
         {
@@ -86,6 +89,7 @@ data:
           "gridPos": { "h": 4, "w": 2, "x": 17, "y": 1 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
           "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } } },
+          "options": { "graphMode": "none" },
           "targets": [{ "expr": "sum(cainjekt_injections_errors_total)" }]
         },
         {
@@ -94,6 +98,7 @@ data:
           "gridPos": { "h": 4, "w": 2, "x": 19, "y": 1 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
           "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "text", "value": null }] } } },
+          "options": { "graphMode": "none" },
           "targets": [{ "expr": "sum(cainjekt_skipped_total)" }]
         },
         {
@@ -102,56 +107,35 @@ data:
           "gridPos": { "h": 4, "w": 3, "x": 21, "y": 1 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
           "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "text", "value": null }, { "color": "orange", "value": 10 }] } } },
+          "options": { "graphMode": "none" },
           "targets": [{ "expr": "sum(cainjekt_orphans_cleaned_total)" }]
         },
         {
-          "title": "Processors",
-          "type": "row",
-          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
-          "collapsed": false
-        },
-        {
-          "title": "OS Distro Distribution",
-          "type": "piechart",
-          "gridPos": { "h": 8, "w": 6, "x": 0, "y": 10 },
-          "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" } } },
-          "options": { "legend": { "displayMode": "table", "placement": "right" }, "pieType": "donut" },
-          "targets": [
-            { "expr": "sum by (processor) (cainjekt_processor_detected_total{processor=~\"os-.*\"})", "legendFormat": "{{ `{{processor}}` }}" }
-          ]
-        },
-        {
-          "title": "Language Runtime Distribution",
-          "type": "piechart",
-          "gridPos": { "h": 8, "w": 6, "x": 6, "y": 10 },
-          "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" } } },
-          "options": { "legend": { "displayMode": "table", "placement": "right" }, "pieType": "donut" },
-          "targets": [
-            { "expr": "sum by (processor) (cainjekt_processor_detected_total{processor=~\"lang-.*\"})", "legendFormat": "{{ `{{processor}}` }}" }
-          ]
-        },
-        {
-          "title": "Processor Application Rate",
+          "title": "Injections Over Time",
           "type": "timeseries",
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 10 },
+          "gridPos": { "h": 4, "w": 11, "x": 13, "y": 5 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "fillOpacity": 10, "lineWidth": 2 } } },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": { "fillOpacity": 10, "lineWidth": 1, "showPoints": "never" }
+            }
+          },
           "targets": [
-            { "expr": "sum by (processor) (rate(cainjekt_processor_applied_total[5m]))", "legendFormat": "{{ `{{processor}}` }}" }
+            { "expr": "sum(cainjekt_injections_total)", "legendFormat": "injections" },
+            { "expr": "sum(cainjekt_skipped_total)", "legendFormat": "skipped" }
           ]
         },
         {
           "title": "CA Bundle",
           "type": "row",
-          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 },
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
           "collapsed": false
         },
         {
           "title": "CA Bundle Age",
           "type": "stat",
-          "gridPos": { "h": 6, "w": 4, "x": 0, "y": 19 },
+          "gridPos": { "h": 6, "w": 4, "x": 0, "y": 10 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
           "fieldConfig": {
             "defaults": {
@@ -160,22 +144,24 @@ data:
               "unit": "s"
             }
           },
-          "targets": [{ "expr": "time() - cainjekt_ca_bundle_last_modified_timestamp" }]
+          "options": { "graphMode": "none" },
+          "targets": [{ "expr": "time() - max(cainjekt_ca_bundle_last_modified_timestamp)" }]
         },
         {
-          "title": "Certificates",
+          "title": "Certificates in Bundle",
           "type": "stat",
-          "gridPos": { "h": 6, "w": 3, "x": 4, "y": 19 },
+          "gridPos": { "h": 6, "w": 3, "x": 4, "y": 10 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
           "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "blue", "value": null }] } } },
-          "targets": [{ "expr": "cainjekt_ca_bundle_certificates_count" }]
+          "options": { "graphMode": "none" },
+          "targets": [{ "expr": "max(cainjekt_ca_bundle_certificates_count)" }]
         },
         {
           "title": "Injections by CA Hash",
           "type": "timeseries",
-          "gridPos": { "h": 6, "w": 17, "x": 7, "y": 19 },
+          "gridPos": { "h": 6, "w": 17, "x": 7, "y": 10 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "fillOpacity": 20, "lineWidth": 2 } } },
+          "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "fillOpacity": 20, "lineWidth": 2, "showPoints": "never" } } },
           "targets": [
             { "expr": "sum by (hash) (rate(cainjekt_ca_bundle_injections_total[5m]))", "legendFormat": "{{ `{{hash}}` }}" }
           ]
@@ -183,36 +169,36 @@ data:
         {
           "title": "Operations",
           "type": "row",
-          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 25 },
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 },
           "collapsed": false
         },
         {
           "title": "Cleanups / min",
           "type": "timeseries",
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 26 },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 17 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "fillOpacity": 20, "lineWidth": 2 } } },
+          "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "fillOpacity": 20, "lineWidth": 2, "showPoints": "never" } } },
           "targets": [
-            { "expr": "sum(rate(cainjekt_cleanups_total[1m]))", "legendFormat": "cleanups" },
-            { "expr": "sum(rate(cainjekt_orphans_cleaned_total[1m]))", "legendFormat": "orphans" },
-            { "expr": "sum(rate(cainjekt_cleanups_errors_total[1m]))", "legendFormat": "errors" }
+            { "expr": "sum(rate(cainjekt_cleanups_total[5m]))", "legendFormat": "cleanups" },
+            { "expr": "sum(rate(cainjekt_orphans_cleaned_total[5m]))", "legendFormat": "orphans" },
+            { "expr": "sum(rate(cainjekt_cleanups_errors_total[5m]))", "legendFormat": "errors" }
           ]
         },
         {
           "title": "Go Runtime",
           "type": "timeseries",
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 26 },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 17 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
           "fieldConfig": {
             "defaults": {
               "color": { "mode": "palette-classic" },
-              "custom": { "fillOpacity": 10, "lineWidth": 2 },
+              "custom": { "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" },
               "unit": "bytes"
             }
           },
           "targets": [
-            { "expr": "go_memstats_alloc_bytes{job=~\".*cainjekt.*\"}", "legendFormat": "heap alloc" },
-            { "expr": "process_resident_memory_bytes{job=~\".*cainjekt.*\"}", "legendFormat": "RSS" }
+            { "expr": "sum(go_memstats_alloc_bytes{job=~\".*cainjekt.*\"})", "legendFormat": "heap alloc" },
+            { "expr": "sum(process_resident_memory_bytes{job=~\".*cainjekt.*\"})", "legendFormat": "RSS" }
           ]
         }
       ],
