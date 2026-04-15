@@ -17,7 +17,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
     go build -a -ldflags="-s -w" -trimpath -o cainjekt ./cmd/cainjekt
 
 # Installer image with shell for initContainer
-FROM debian:12-slim AS installer
+FROM debian:13-slim AS installer
 
 # Copy the binary from builder
 COPY --from=builder /workspace/cainjekt /cainjekt
