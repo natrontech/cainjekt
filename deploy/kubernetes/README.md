@@ -143,15 +143,33 @@ The DaemonSet supports the following environment variables:
 - `CAINJEKT_FAIL_POLICY`: Failure policy, either `fail-open` or `fail-closed` (default: `fail-open`)
 - `CAINJEKT_ANNOTATION_PREFIX`: Annotation prefix for pod opt-in (default: `cainjekt.natron.io`)
 - `CAINJEKT_LOG_LEVEL`: Log level: `debug`, `info`, `warn`, `error` (default: `info`)
+- `CAINJEKT_HOOK_TIMEOUT_SEC`: OCI hook timeout in seconds (default: `5`). Containerd kills the hook if it exceeds this.
 
 ### Pod Annotations
 
-To enable CA injection for a specific pod, add the following annotation:
+To enable CA injection for a specific pod, add the annotation:
 
 ```yaml
 metadata:
   annotations:
     cainjekt.natron.io/enabled: "true"
+```
+
+Or label a namespace for all pods within it:
+
+```bash
+kubectl label namespace my-namespace cainjekt.natron.io/enabled=true
+```
+
+### Container-Level Opt-Out
+
+To exclude specific containers (e.g. sidecars) from injection:
+
+```yaml
+metadata:
+  annotations:
+    cainjekt.natron.io/enabled: "true"
+    cainjekt.natron.io/exclude-containers: "istio-proxy,linkerd-proxy"
 ```
 
 ### Processor Selection
@@ -162,8 +180,8 @@ You can include or exclude specific processors using annotations:
 metadata:
   annotations:
     cainjekt.natron.io/enabled: "true"
-    cainjekt.natron.io/processors.include: "osstore,lang-nodejs,lang-python"
-    cainjekt.natron.io/processors.exclude: "java"
+    cainjekt.natron.io/processors.include: "os-debian,lang-nodejs,lang-python"
+    cainjekt.natron.io/processors.exclude: "os-fallback"
 ```
 
 Language-specific processors currently include:

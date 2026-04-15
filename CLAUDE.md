@@ -67,7 +67,7 @@ make copy-plugin              # Copy binary to kind node
 
 - Integration tests use build tag `//go:build integration` gated by env vars (`CAINJEKT_TLS_INTEGRATION=1`, `CAINJEKT_E2E=1`)
 - Tests run against real kind clusters (default: `cainjekt-test-cluster`, configurable via `CAINJEKT_CLUSTER_NAME`)
-- Two E2E tests: `TestE2E_ManifestDeployment` (kustomize) and `TestE2E_HelmDeployment` (Helm chart)
+- E2E tests in 3 files: `e2e_test.go` (kustomize), `e2e_helm_test.go` (Helm), `e2e_advanced_test.go` (init containers, restart re-injection, status file)
 - Test helpers in `internal/testutil/`
 - Kind config at `hack/kind.yaml` enables NRI plugin in containerd
 
@@ -79,7 +79,10 @@ make copy-plugin              # Copy binary to kind node
 | `CAINJEKT_ANNOTATION_PREFIX` | `cainjekt.natron.io` | Annotation prefix |
 | `CAINJEKT_FAIL_POLICY` | `fail-open` | Hook failure policy |
 | `CAINJEKT_LOG_LEVEL` | `info` | Log level (debug/info/warn/error) |
+| `CAINJEKT_HOOK_TIMEOUT_SEC` | `5` | OCI hook timeout (containerd kills if exceeded) |
 | `CAINJEKT_DYNAMIC_CA_ROOT` | `/run/cainjekt/containers` | Per-container CA staging |
+
+Annotations: `<prefix>/enabled`, `<prefix>/processors.include`, `<prefix>/processors.exclude`, `<prefix>/exclude-containers`.
 
 ## Deployment
 

@@ -94,7 +94,17 @@ Both `linux/amd64` and `linux/arm64` platforms are supported.
 | `CAINJEKT_ANNOTATION_PREFIX` | `cainjekt.natron.io` | Annotation prefix for pod opt-in |
 | `CAINJEKT_FAIL_POLICY` | `fail-open` | `fail-open` or `fail-closed` |
 | `CAINJEKT_LOG_LEVEL` | `info` | Log level: `debug`, `info`, `warn`, `error` |
+| `CAINJEKT_HOOK_TIMEOUT_SEC` | `5` | OCI hook timeout in seconds (containerd kills hook if exceeded) |
 | `CAINJEKT_DYNAMIC_CA_ROOT` | `/run/cainjekt/containers` | Per-container CA staging root |
+
+### Pod Annotations
+
+| Annotation | Description |
+|-----------|-------------|
+| `<prefix>/enabled: "true"` | Enable CA injection for this pod |
+| `<prefix>/processors.include` | Comma-separated processor allow list |
+| `<prefix>/processors.exclude` | Comma-separated processor deny list |
+| `<prefix>/exclude-containers` | Comma-separated container names to skip (e.g. `istio-proxy,linkerd-proxy`) |
 
 ## Known Limitations
 
@@ -108,7 +118,7 @@ Both `linux/amd64` and `linux/arm64` platforms are supported.
 | Processor | Env Var Set | Detection |
 |-----------|------------|-----------|
 | `lang-go` | `SSL_CERT_FILE` | `/usr/local/go/bin/go` |
-| `lang-java` | `JAVA_TOOL_OPTIONS` (trustStore + PEM type) | `/usr/bin/java` |
+| `lang-java` | `JAVA_TOOL_OPTIONS` (trustStore + PEM type, JDK 18+) | `/usr/bin/java` |
 | `lang-nodejs` | `NODE_EXTRA_CA_CERTS` | `/usr/bin/node` |
 | `lang-python` | `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE` | `/usr/bin/python3` |
 | `lang-ruby` | `SSL_CERT_FILE` | `/usr/bin/ruby` |
