@@ -17,12 +17,9 @@ metadata:
 data:
   cainjekt.json: |-
     {
-      "annotations": {
-        "list": []
-      },
+      "annotations": { "list": [] },
       "description": "CA certificate injection metrics for cainjekt",
       "editable": true,
-      "fiscalYearStartMonth": 0,
       "graphTooltip": 1,
       "links": [],
       "panels": [
@@ -35,168 +32,77 @@ data:
         {
           "title": "Injections / min",
           "type": "timeseries",
-          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 1 },
+          "gridPos": { "h": 8, "w": 10, "x": 0, "y": 1 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
           "fieldConfig": {
             "defaults": {
               "color": { "mode": "palette-classic" },
               "custom": { "fillOpacity": 20, "lineWidth": 2 }
-            }
-          },
-          "targets": [
-            {
-              "expr": "sum(rate(cainjekt_injections_total[1m])) by (instance)",
-              "legendFormat": "{{ `{{instance}}` }} total"
             },
-            {
-              "expr": "sum(rate(cainjekt_injections_errors_total[1m])) by (instance)",
-              "legendFormat": "{{ `{{instance}}` }} errors"
-            }
+            "overrides": [
+              { "matcher": { "id": "byName", "options": "errors" }, "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }] }
+            ]
+          },
+          "targets": [
+            { "expr": "sum(rate(cainjekt_injections_total[1m]))", "legendFormat": "total" },
+            { "expr": "sum(rate(cainjekt_injections_errors_total[1m]))", "legendFormat": "errors" }
           ]
         },
         {
-          "title": "Injection Success Rate",
+          "title": "Success Rate",
           "type": "gauge",
-          "gridPos": { "h": 8, "w": 4, "x": 8, "y": 1 },
+          "gridPos": { "h": 4, "w": 3, "x": 10, "y": 1 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
           "fieldConfig": {
             "defaults": {
               "color": { "mode": "thresholds" },
-              "thresholds": {
-                "steps": [
-                  { "color": "red", "value": null },
-                  { "color": "orange", "value": 90 },
-                  { "color": "green", "value": 99 }
-                ]
-              },
-              "unit": "percent",
-              "min": 0,
-              "max": 100
+              "thresholds": { "steps": [{ "color": "red", "value": null }, { "color": "orange", "value": 90 }, { "color": "green", "value": 99 }] },
+              "unit": "percent", "min": 0, "max": 100
             }
           },
           "targets": [
-            {
-              "expr": "100 * (1 - (sum(rate(cainjekt_injections_errors_total[5m])) / clamp_min(sum(rate(cainjekt_injections_total[5m])), 1)))"
-            }
+            { "expr": "100 * (1 - (sum(rate(cainjekt_injections_errors_total[5m])) / clamp_min(sum(rate(cainjekt_injections_total[5m])), 1)))" }
           ]
         },
         {
-          "title": "Active Containers",
+          "title": "Active",
           "type": "stat",
-          "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
+          "gridPos": { "h": 4, "w": 2, "x": 13, "y": 1 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "fieldConfig": {
-            "defaults": {
-              "color": { "mode": "thresholds" },
-              "thresholds": { "steps": [{ "color": "blue", "value": null }] }
-            }
-          },
-          "targets": [
-            {
-              "expr": "sum(cainjekt_active_containers)",
-              "legendFormat": "active"
-            }
-          ]
+          "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "blue", "value": null }] } } },
+          "targets": [{ "expr": "sum(cainjekt_active_containers)", "legendFormat": "active" }]
         },
         {
-          "title": "Skipped Containers",
+          "title": "Injections",
           "type": "stat",
-          "gridPos": { "h": 4, "w": 4, "x": 12, "y": 5 },
+          "gridPos": { "h": 4, "w": 2, "x": 15, "y": 1 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "fieldConfig": {
-            "defaults": {
-              "color": { "mode": "thresholds" },
-              "thresholds": { "steps": [{ "color": "text", "value": null }] }
-            }
-          },
-          "targets": [
-            {
-              "expr": "sum(cainjekt_skipped_total)",
-              "legendFormat": "skipped"
-            }
-          ]
+          "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }] } } },
+          "targets": [{ "expr": "sum(cainjekt_injections_total)" }]
         },
         {
-          "title": "Total Injections",
+          "title": "Errors",
           "type": "stat",
-          "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
+          "gridPos": { "h": 4, "w": 2, "x": 17, "y": 1 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "fieldConfig": {
-            "defaults": {
-              "color": { "mode": "thresholds" },
-              "thresholds": { "steps": [{ "color": "green", "value": null }] }
-            }
-          },
-          "targets": [
-            {
-              "expr": "sum(cainjekt_injections_total)",
-              "legendFormat": "total"
-            }
-          ]
+          "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } } },
+          "targets": [{ "expr": "sum(cainjekt_injections_errors_total)" }]
         },
         {
-          "title": "Total Errors",
+          "title": "Skipped",
           "type": "stat",
-          "gridPos": { "h": 4, "w": 4, "x": 16, "y": 5 },
+          "gridPos": { "h": 4, "w": 2, "x": 19, "y": 1 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "fieldConfig": {
-            "defaults": {
-              "color": { "mode": "thresholds" },
-              "thresholds": {
-                "steps": [
-                  { "color": "green", "value": null },
-                  { "color": "red", "value": 1 }
-                ]
-              }
-            }
-          },
-          "targets": [
-            {
-              "expr": "sum(cainjekt_injections_errors_total)",
-              "legendFormat": "errors"
-            }
-          ]
+          "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "text", "value": null }] } } },
+          "targets": [{ "expr": "sum(cainjekt_skipped_total)" }]
         },
         {
-          "title": "Orphans Cleaned",
+          "title": "Orphans",
           "type": "stat",
-          "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
+          "gridPos": { "h": 4, "w": 3, "x": 21, "y": 1 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "fieldConfig": {
-            "defaults": {
-              "color": { "mode": "thresholds" },
-              "thresholds": { "steps": [{ "color": "text", "value": null }] }
-            }
-          },
-          "targets": [
-            {
-              "expr": "sum(cainjekt_orphans_cleaned_total)",
-              "legendFormat": "orphans"
-            }
-          ]
-        },
-        {
-          "title": "Cleanup Errors",
-          "type": "stat",
-          "gridPos": { "h": 4, "w": 4, "x": 20, "y": 5 },
-          "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "fieldConfig": {
-            "defaults": {
-              "color": { "mode": "thresholds" },
-              "thresholds": {
-                "steps": [
-                  { "color": "green", "value": null },
-                  { "color": "orange", "value": 1 }
-                ]
-              }
-            }
-          },
-          "targets": [
-            {
-              "expr": "sum(cainjekt_cleanups_errors_total)",
-              "legendFormat": "errors"
-            }
-          ]
+          "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "text", "value": null }, { "color": "orange", "value": 10 }] } } },
+          "targets": [{ "expr": "sum(cainjekt_orphans_cleaned_total)" }]
         },
         {
           "title": "Processors",
@@ -205,21 +111,25 @@ data:
           "collapsed": false
         },
         {
-          "title": "Processor Detection Rate",
-          "type": "timeseries",
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 10 },
+          "title": "OS Distro Distribution",
+          "type": "piechart",
+          "gridPos": { "h": 8, "w": 6, "x": 0, "y": 10 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "fieldConfig": {
-            "defaults": {
-              "color": { "mode": "palette-classic" },
-              "custom": { "fillOpacity": 10, "lineWidth": 2 }
-            }
-          },
+          "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" } } },
+          "options": { "legend": { "displayMode": "table", "placement": "right" }, "pieType": "donut" },
           "targets": [
-            {
-              "expr": "sum by (processor) (rate(cainjekt_processor_detected_total[5m]))",
-              "legendFormat": "{{ `{{processor}}` }}"
-            }
+            { "expr": "sum by (processor) (cainjekt_processor_detected_total{processor=~\"os-.*\"})", "legendFormat": "{{ `{{processor}}` }}" }
+          ]
+        },
+        {
+          "title": "Language Runtime Distribution",
+          "type": "piechart",
+          "gridPos": { "h": 8, "w": 6, "x": 6, "y": 10 },
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" } } },
+          "options": { "legend": { "displayMode": "table", "placement": "right" }, "pieType": "donut" },
+          "targets": [
+            { "expr": "sum by (processor) (cainjekt_processor_detected_total{processor=~\"lang-.*\"})", "legendFormat": "{{ `{{processor}}` }}" }
           ]
         },
         {
@@ -227,51 +137,71 @@ data:
           "type": "timeseries",
           "gridPos": { "h": 8, "w": 12, "x": 12, "y": 10 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "fieldConfig": {
-            "defaults": {
-              "color": { "mode": "palette-classic" },
-              "custom": { "fillOpacity": 10, "lineWidth": 2 }
-            }
-          },
+          "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "fillOpacity": 10, "lineWidth": 2 } } },
           "targets": [
-            {
-              "expr": "sum by (processor) (rate(cainjekt_processor_applied_total[5m]))",
-              "legendFormat": "{{ `{{processor}}` }}"
-            }
+            { "expr": "sum by (processor) (rate(cainjekt_processor_applied_total[5m]))", "legendFormat": "{{ `{{processor}}` }}" }
           ]
         },
         {
-          "title": "Operations",
+          "title": "CA Bundle",
           "type": "row",
           "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 },
           "collapsed": false
         },
         {
-          "title": "Cleanups / min",
-          "type": "timeseries",
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 19 },
+          "title": "CA Bundle Age",
+          "type": "stat",
+          "gridPos": { "h": 6, "w": 4, "x": 0, "y": 19 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
           "fieldConfig": {
             "defaults": {
-              "color": { "mode": "palette-classic" },
-              "custom": { "fillOpacity": 20, "lineWidth": 2 }
+              "color": { "mode": "thresholds" },
+              "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 2592000 }, { "color": "red", "value": 7776000 }] },
+              "unit": "s"
             }
           },
+          "targets": [{ "expr": "time() - cainjekt_ca_bundle_last_modified_timestamp" }]
+        },
+        {
+          "title": "Certificates",
+          "type": "stat",
+          "gridPos": { "h": 6, "w": 3, "x": 4, "y": 19 },
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "blue", "value": null }] } } },
+          "targets": [{ "expr": "cainjekt_ca_bundle_certificates_count" }]
+        },
+        {
+          "title": "Injections by CA Hash",
+          "type": "timeseries",
+          "gridPos": { "h": 6, "w": 17, "x": 7, "y": 19 },
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "fillOpacity": 20, "lineWidth": 2 } } },
           "targets": [
-            {
-              "expr": "sum(rate(cainjekt_cleanups_total[1m])) by (instance)",
-              "legendFormat": "{{ `{{instance}}` }} cleanups"
-            },
-            {
-              "expr": "sum(rate(cainjekt_orphans_cleaned_total[1m])) by (instance)",
-              "legendFormat": "{{ `{{instance}}` }} orphans"
-            }
+            { "expr": "sum by (hash) (rate(cainjekt_ca_bundle_injections_total[5m]))", "legendFormat": "{{ `{{hash}}` }}" }
+          ]
+        },
+        {
+          "title": "Operations",
+          "type": "row",
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 25 },
+          "collapsed": false
+        },
+        {
+          "title": "Cleanups / min",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 26 },
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "fillOpacity": 20, "lineWidth": 2 } } },
+          "targets": [
+            { "expr": "sum(rate(cainjekt_cleanups_total[1m]))", "legendFormat": "cleanups" },
+            { "expr": "sum(rate(cainjekt_orphans_cleaned_total[1m]))", "legendFormat": "orphans" },
+            { "expr": "sum(rate(cainjekt_cleanups_errors_total[1m]))", "legendFormat": "errors" }
           ]
         },
         {
           "title": "Go Runtime",
           "type": "timeseries",
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 19 },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 26 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
           "fieldConfig": {
             "defaults": {
@@ -281,14 +211,8 @@ data:
             }
           },
           "targets": [
-            {
-              "expr": "sum(go_memstats_alloc_bytes{job=~\".*cainjekt.*\"}) by (instance)",
-              "legendFormat": "{{ `{{instance}}` }} heap alloc"
-            },
-            {
-              "expr": "sum(process_resident_memory_bytes{job=~\".*cainjekt.*\"}) by (instance)",
-              "legendFormat": "{{ `{{instance}}` }} RSS"
-            }
+            { "expr": "go_memstats_alloc_bytes{job=~\".*cainjekt.*\"}", "legendFormat": "heap alloc" },
+            { "expr": "process_resident_memory_bytes{job=~\".*cainjekt.*\"}", "legendFormat": "RSS" }
           ]
         }
       ],
@@ -303,7 +227,6 @@ data:
             "label": "Datasource",
             "multi": false,
             "name": "datasource",
-            "options": [],
             "query": "prometheus",
             "refresh": 1,
             "type": "datasource"

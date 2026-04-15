@@ -1,6 +1,7 @@
 package nri
 
 import (
+	"encoding/pem"
 	"io"
 	"log/slog"
 	"os"
@@ -70,6 +71,26 @@ func hookTimeoutSec() int {
 		}
 	}
 	return config.DefaultHookTimeoutSec
+}
+
+// updateCABundleGauges sets the CA bundle mtime and certificate count gauges.
+func updateCABundleGauges(m *Metrics, caFilePath string, content []byte) {
+	if fi, err := os.Stat(caFilePath); err == nil {
+		m.CABundleLastModified.Set(float64(fi.ModTime().Unix()))
+	}
+	count := 0
+	rest := content
+	for {
+		var block *pem.Block
+		block, rest = pem.Decode(rest)
+		if block == nil {
+			break
+		}
+		if block.Type == "CERTIFICATE" {
+			count++
+		}
+	}
+	m.CABundleCertCount.Set(float64(count))
 }
 
 func hasEnv(env []string, key string) bool {

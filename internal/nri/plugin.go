@@ -162,6 +162,9 @@ func (p *Plugin) CreateContainer(
 	caHash := fmt.Sprintf("%x", sha256.Sum256(caContent))
 	p.metrics.CABundleHash.WithLabelValues(caHash[:12]).Inc()
 
+	// Update CA bundle age and cert count gauges.
+	updateCABundleGauges(p.metrics, sourceCAFile, caContent)
+
 	hook := &api.Hook{
 		Path: self,
 		Env: []string{
