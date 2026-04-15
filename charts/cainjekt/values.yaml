@@ -15,6 +15,12 @@ commonLabels: {}
 ## @param commonAnnotations Annotations to add to all deployed objects
 commonAnnotations: {}
 
+## @param podLabels Extra labels to add to DaemonSet pods
+podLabels: {}
+
+## @param podAnnotations Extra annotations to add to DaemonSet pods
+podAnnotations: {}
+
 ## @section cainjekt image parameters
 
 image:
