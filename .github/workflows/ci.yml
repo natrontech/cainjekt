@@ -6,9 +6,9 @@ on:
   pull_request:
 
 jobs:
-  test:
+  lint-and-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
@@ -20,42 +20,22 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Install kind
-        run: |
-          curl -fsSL -o ./kind https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-amd64
-          chmod +x ./kind
-          sudo mv ./kind /usr/local/bin/kind
-          kind version
-
-      - name: Install kubectl
-        uses: azure/setup-kubectl@v4
-        with:
-          version: v1.35.0
-
-      - name: Verify toolchain
-        run: |
-          go version
-          docker version
-          kubectl version --client
-          make --version | head -n 1
+      - name: Install golangci-lint
+        run: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(go env GOPATH)/bin
 
       - name: Lint
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(go env GOPATH)/bin
-          make lint
+        run: make lint
 
       - name: Unit tests
         run: make test
 
-      - name: Integration tests
-        run: make integration-test
-
-      - name: E2E tests
-        run: make e2e-test
+      - name: Vet
+        run: make vet
 
   helm:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -63,8 +43,17 @@ jobs:
       - name: Helm lint
         run: helm lint charts/cainjekt
 
-      - name: Helm template
+      - name: Helm template (default)
         run: helm template test charts/cainjekt --set caBundle="test-cert"
+
+      - name: Helm template (full monitoring)
+        run: |
+          helm template test charts/cainjekt \
+            --set caBundle="test-cert" \
+            --set serviceMonitor.enabled=true \
+            --set prometheusRule.enabled=true \
+            --set grafanaDashboard.enabled=true \
+            --set podDisruptionBudget.enabled=true
 
   docker:
     runs-on: ubuntu-latest
@@ -103,3 +92,57 @@ jobs:
           docker inspect cainjekt:ci-test --format='{{.Config.Entrypoint}}'
           docker inspect cainjekt:ci-test --format='Size: {{.Size}} bytes'
           docker inspect cainjekt-installer:ci-test --format='Size: {{.Size}} bytes'
+
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: [lint-and-test, docker]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install kind
+        run: |
+          curl -fsSL -o ./kind https://kind.sigs.k8s.io/dl/v0.31.0/kind-linux-amd64
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: v1.35.0
+
+      - name: Create kind cluster
+        run: make prepare-test-cluster
+
+      - name: Build and load images
+        run: make kind-load
+
+      - name: Integration tests (TLS)
+        run: make integration-test
+
+      - name: E2E tests (kustomize + Helm + advanced)
+        run: make e2e-test
+
+      - name: Collect debug info on failure
+        if: failure()
+        run: |
+          echo "=== DaemonSet status ==="
+          kubectl get daemonset -n kube-system -o wide || true
+          echo "=== Pods ==="
+          kubectl get pods -n kube-system -l app.kubernetes.io/name=cainjekt -o wide || true
+          kubectl get pods -n kube-system -l app=cainjekt -o wide || true
+          echo "=== Pod logs ==="
+          kubectl logs -n kube-system -l app.kubernetes.io/name=cainjekt --tail=100 --all-containers=true || true
+          kubectl logs -n kube-system -l app=cainjekt --tail=100 --all-containers=true || true
+          echo "=== Helm releases ==="
+          helm list -n kube-system || true
+          echo "=== Events ==="
+          kubectl get events -n kube-system --sort-by=.metadata.creationTimestamp | tail -30 || true
