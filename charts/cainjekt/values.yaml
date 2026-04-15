@@ -119,6 +119,16 @@ rbac:
 
 ## @section Monitoring parameters
 
+grafanaDashboard:
+  ## @param grafanaDashboard.enabled Create a ConfigMap with a Grafana dashboard (auto-discovered by Grafana sidecar)
+  enabled: false
+  ## @param grafanaDashboard.namespace Namespace to create the dashboard ConfigMap in (defaults to release namespace; set to monitoring namespace if Grafana runs there)
+  namespace: ""
+  ## @param grafanaDashboard.labels Extra labels for the dashboard ConfigMap
+  labels: {}
+  ## @param grafanaDashboard.annotations Extra annotations for the dashboard ConfigMap
+  annotations: {}
+
 serviceMonitor:
   ## @param serviceMonitor.enabled Create a ServiceMonitor for Prometheus Operator
   enabled: false
