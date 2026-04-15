@@ -1,3 +1,4 @@
+// Package osstore provides OS-level CA trust store injection processors.
 package osstore
 
 import (
@@ -10,9 +11,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	hookapi "github.com/tsuzu/cainjekt/internal/engine/api"
-	"github.com/tsuzu/cainjekt/pkg/certs"
-	"github.com/tsuzu/cainjekt/pkg/fsx"
+	hookapi "github.com/natrontech/cainjekt/internal/engine/api"
+	"github.com/natrontech/cainjekt/pkg/certs"
+	"github.com/natrontech/cainjekt/pkg/fsx"
 )
 
 const individualCAFileName = "cainjekt.crt"
@@ -27,6 +28,7 @@ type processor struct {
 	fallback   bool
 }
 
+// NewDebian returns a processor for Debian/Ubuntu-based distributions.
 func NewDebian() hookapi.Processor {
 	return &processor{
 		name:       "os-debian",
@@ -38,6 +40,7 @@ func NewDebian() hookapi.Processor {
 	}
 }
 
+// NewRHEL returns a processor for RHEL/Fedora/CentOS-based distributions.
 func NewRHEL() hookapi.Processor {
 	return &processor{
 		name:       "os-rhel",
@@ -49,6 +52,7 @@ func NewRHEL() hookapi.Processor {
 	}
 }
 
+// NewOpenSUSE returns a processor for openSUSE/SLES-based distributions.
 func NewOpenSUSE() hookapi.Processor {
 	return &processor{
 		name:       "os-opensuse",
@@ -60,6 +64,7 @@ func NewOpenSUSE() hookapi.Processor {
 	}
 }
 
+// NewAlpine returns a processor for Alpine Linux.
 func NewAlpine() hookapi.Processor {
 	return &processor{
 		name:       "os-alpine",
@@ -71,6 +76,7 @@ func NewAlpine() hookapi.Processor {
 	}
 }
 
+// NewArch returns a processor for Arch Linux.
 func NewArch() hookapi.Processor {
 	return &processor{
 		name:       "os-arch",
@@ -82,6 +88,7 @@ func NewArch() hookapi.Processor {
 	}
 }
 
+// NewFallback returns a processor that tries common trust store paths when the distro is unknown.
 func NewFallback() hookapi.Processor {
 	return &processor{
 		name:   "os-fallback",
@@ -138,6 +145,18 @@ func (p *processor) Apply(ctx *hookapi.Context) error {
 	targetHost, targetContainer, err := detectTrustStorePath(ctx.Rootfs, p.candidates)
 	if err != nil {
 		return err
+	}
+
+	// Check if rootfs is writable before attempting modifications.
+	if !isRootfsWritable(ctx.Rootfs) {
+		ctx.Facts.Set(hookapi.FactRootfsReadOnly, "true")
+		ctx.Facts.Set(hookapi.FactTrustStorePath, targetContainer)
+		ctx.Facts.Set(hookapi.FactDistro, p.distro)
+		// Use the dynamic CA file directly — it's on a host-mounted writable path.
+		if ctx.CAFile != "" {
+			ctx.Facts.Set(hookapi.FactIndividualCAPath, ctx.CAFile)
+		}
+		return nil
 	}
 
 	current, err := os.ReadFile(targetHost)
@@ -281,9 +300,7 @@ func parseOSRelease(r io.Reader) (osRelease, error) {
 		case "ID":
 			out.id = strings.ToLower(val)
 		case "ID_LIKE":
-			for _, token := range strings.Fields(strings.ToLower(val)) {
-				out.idLike = append(out.idLike, token)
-			}
+			out.idLike = append(out.idLike, strings.Fields(strings.ToLower(val))...)
 		}
 	}
 	if err := sc.Err(); err != nil {
@@ -405,4 +422,15 @@ func (p *processor) matches(info osRelease) bool {
 		}
 	}
 	return false
+}
+
+func isRootfsWritable(rootfs string) bool {
+	probe := filepath.Join(rootfs, ".cainjekt-probe")
+	f, err := os.Create(probe)
+	if err != nil {
+		return false
+	}
+	_ = f.Close()
+	_ = os.Remove(probe)
+	return true
 }

@@ -56,6 +56,9 @@ spec:
           value: /run/cainjekt/containers
         - name: CAINJEKT_PLUGIN_BINARY_PATH
           value: /opt/cainjekt/bin/cainjekt
+        # Annotation prefix for pod opt-in. Override to use a custom prefix.
+        # - name: CAINJEKT_ANNOTATION_PREFIX
+        #   value: cainjekt.natron.io
         - name: NODE_NAME
           valueFrom:
             fieldRef:

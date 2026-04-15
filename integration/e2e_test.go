@@ -162,7 +162,7 @@ metadata:
   name: test-ca-injection
   namespace: %s
   annotations:
-    cainjekt.io/enabled: "true"
+    cainjekt.natron.io/enabled: "true"
 spec:
   restartPolicy: Never
   containers:

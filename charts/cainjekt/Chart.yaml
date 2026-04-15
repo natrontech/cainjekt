@@ -1,0 +1,21 @@
+apiVersion: v2
+name: cainjekt
+description: Transparent CA certificate injection for Kubernetes containers using containerd NRI
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/natrontech/cainjekt
+sources:
+  - https://github.com/natrontech/cainjekt
+maintainers:
+  - name: natrontech
+keywords:
+  - certificates
+  - ca-injection
+  - nri
+  - containerd
+  - kubernetes
+  - tls
+  - security
+annotations:
+  category: Security Tools

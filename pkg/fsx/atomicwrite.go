@@ -1,3 +1,4 @@
+// Package fsx provides filesystem utilities with safety guarantees.
 package fsx
 
 import (
@@ -8,12 +9,14 @@ import (
 	"syscall"
 )
 
+// WriteOptions controls the behavior of AtomicWrite.
 type WriteOptions struct {
 	FallbackMode  os.FileMode
 	RefuseSymlink bool
 	PreserveOwner bool
 }
 
+// AtomicWrite writes data to path via temp file + rename for crash safety.
 func AtomicWrite(path string, data []byte, opt WriteOptions) error {
 	if opt.FallbackMode == 0 {
 		opt.FallbackMode = 0o644

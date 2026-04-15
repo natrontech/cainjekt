@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	hookapi "github.com/tsuzu/cainjekt/internal/engine/api"
+	hookapi "github.com/natrontech/cainjekt/internal/engine/api"
 )
 
 func TestParseOSRelease(t *testing.T) {
@@ -122,7 +122,6 @@ func TestApplySkipsWhenTrustStoreAlreadyConfigured(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -144,8 +143,8 @@ func TestResolveContainerPathAbsoluteSymlink(t *testing.T) {
 	t.Parallel()
 
 	rootfs := t.TempDir()
-	mustMkdirAll(t, filepath.Join(rootfs, "real", "ssl"), 0o755)
-	mustMkdirAll(t, filepath.Join(rootfs, "etc"), 0o755)
+	mustMkdirAll(t, filepath.Join(rootfs, "real", "ssl"))
+	mustMkdirAll(t, filepath.Join(rootfs, "etc"))
 	mustSymlink(t, "/real/ssl/ca-bundle.pem", filepath.Join(rootfs, "etc", "ssl-bundle.pem"))
 
 	host, container, err := resolveContainerPath(rootfs, "/etc/ssl-bundle.pem")
@@ -164,8 +163,8 @@ func TestResolveContainerPathRelativeDirSymlink(t *testing.T) {
 	t.Parallel()
 
 	rootfs := t.TempDir()
-	mustMkdirAll(t, filepath.Join(rootfs, "etc"), 0o755)
-	mustMkdirAll(t, filepath.Join(rootfs, "usr", "lib"), 0o755)
+	mustMkdirAll(t, filepath.Join(rootfs, "etc"))
+	mustMkdirAll(t, filepath.Join(rootfs, "usr", "lib"))
 	mustSymlink(t, "../usr/lib", filepath.Join(rootfs, "etc", "ssl"))
 
 	host, container, err := resolveContainerPath(rootfs, "/etc/ssl/ca-certificates.crt")
@@ -184,8 +183,8 @@ func TestWriteIndividualCAResolvesSymlinkedAnchorDir(t *testing.T) {
 	t.Parallel()
 
 	rootfs := t.TempDir()
-	mustMkdirAll(t, filepath.Join(rootfs, "usr", "local", "share"), 0o755)
-	mustMkdirAll(t, filepath.Join(rootfs, "var", "certs"), 0o755)
+	mustMkdirAll(t, filepath.Join(rootfs, "usr", "local", "share"))
+	mustMkdirAll(t, filepath.Join(rootfs, "var", "certs"))
 	mustSymlink(t, "/var/certs", filepath.Join(rootfs, "usr", "local", "share", "ca-certificates"))
 
 	content := []byte("dummy")
@@ -247,16 +246,16 @@ func writeOSRelease(t *testing.T, rootfs, body string) {
 	}
 }
 
-func mustMkdirAll(t *testing.T, p string, mode os.FileMode) {
+func mustMkdirAll(t *testing.T, p string) {
 	t.Helper()
-	if err := os.MkdirAll(p, mode); err != nil {
+	if err := os.MkdirAll(p, 0o755); err != nil {
 		t.Fatalf("MkdirAll(%q): %v", p, err)
 	}
 }
 
 func mustSymlink(t *testing.T, target, link string) {
 	t.Helper()
-	mustMkdirAll(t, filepath.Dir(link), 0o755)
+	mustMkdirAll(t, filepath.Dir(link))
 	if err := os.Symlink(target, link); err != nil {
 		t.Fatalf("Symlink(%q -> %q): %v", link, target, err)
 	}

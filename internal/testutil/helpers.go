@@ -1,3 +1,4 @@
+// Package testutil provides shared test helpers for cainjekt.
 package testutil
 
 import (
@@ -5,9 +6,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/tsuzu/cainjekt/internal/util/containerfs"
+	"github.com/natrontech/cainjekt/internal/util/containerfs"
 )
 
+// WriteExecutableInRootfs creates a minimal executable at the given container path inside rootfs.
 func WriteExecutableInRootfs(t testing.TB, rootfs, containerPath string) {
 	t.Helper()
 
@@ -20,6 +22,7 @@ func WriteExecutableInRootfs(t testing.TB, rootfs, containerPath string) {
 	}
 }
 
+// EnvValue returns the value for the given key from an env slice, or empty string if not found.
 func EnvValue(env []string, key string) string {
 	prefix := key + "="
 	for _, e := range env {

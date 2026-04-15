@@ -1,7 +1,7 @@
 CLUSTER_NAME ?= cainjekt-test-cluster
 IMAGE_NAME ?= cainjekt
 IMAGE_TAG ?= latest
-IMAGE_REGISTRY ?= ghcr.io/tsuzu
+IMAGE_REGISTRY ?= ghcr.io/natrontech
 KIND_PLUGIN_OS ?= linux
 
 .PHONY: build
@@ -57,6 +57,34 @@ integration-test:
 e2e-test: prepare-test-cluster
 	GOCACHE=/tmp/go-build-cache CAINJEKT_E2E=1 go test -tags=integration -count=1 -v ./integration -run TestE2E
 
+.PHONY: test
+test:
+	go test ./...
+
 .PHONY: test-all
 test-all: prepare-test-cluster
 	GOCACHE=/tmp/go-build-cache CAINJEKT_TLS_INTEGRATION=1 CAINJEKT_E2E=1 go test -tags=integration -count=1 -v ./integration
+
+.PHONY: lint
+lint:
+	golangci-lint run
+
+.PHONY: lint-fix
+lint-fix:
+	golangci-lint run --fix
+
+.PHONY: fmt
+fmt:
+	go fmt ./...
+
+.PHONY: vet
+vet:
+	go vet ./...
+
+.PHONY: helm-lint
+helm-lint:
+	helm lint charts/cainjekt
+
+.PHONY: helm-template
+helm-template:
+	helm template test charts/cainjekt --set caBundle="test-cert"

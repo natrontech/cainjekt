@@ -1,0 +1,12 @@
+{{- if and .Values.caBundle (not .Values.caBundleExistingConfigMap) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cainjekt.caBundleConfigMapName" . }}
+  namespace: {{ include "cainjekt.namespace" . }}
+  labels:
+    {{- include "cainjekt.labels" . | nindent 4 }}
+data:
+  ca-bundle.pem: |
+    {{- .Values.caBundle | nindent 4 }}
+{{- end }}

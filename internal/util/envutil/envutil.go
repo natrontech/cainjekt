@@ -1,7 +1,20 @@
+// Package envutil provides helpers for manipulating environment variable slices.
 package envutil
 
 import "strings"
 
+// GetValue returns the value for the given key from an env slice, or empty string if not found.
+func GetValue(env []string, key string) string {
+	prefix := key + "="
+	for _, e := range env {
+		if strings.HasPrefix(e, prefix) {
+			return strings.TrimPrefix(e, prefix)
+		}
+	}
+	return ""
+}
+
+// Upsert sets or updates an environment variable in the given env slice.
 func Upsert(env []string, key, value string) []string {
 	prefix := key + "="
 	entry := prefix + value

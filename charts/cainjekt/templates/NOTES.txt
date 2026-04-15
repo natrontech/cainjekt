@@ -1,0 +1,31 @@
+cainjekt has been deployed as a DaemonSet in namespace {{ include "cainjekt.namespace" . }}.
+
+{{- if and (not .Values.caBundle) (not .Values.caBundleExistingConfigMap) }}
+
+WARNING: No CA bundle configured!
+You must provide a CA bundle for injection to work. Either:
+
+  1. Set caBundle in values:
+     helm upgrade {{ .Release.Name }} natrontech/cainjekt \
+       --set-file caBundle=/path/to/ca-bundle.pem
+
+  2. Create a ConfigMap manually and reference it:
+     kubectl create configmap my-ca-bundle \
+       --from-file=ca-bundle.pem=/path/to/ca-bundle.pem \
+       -n {{ include "cainjekt.namespace" . }}
+
+     helm upgrade {{ .Release.Name }} natrontech/cainjekt \
+       --set caBundleExistingConfigMap=my-ca-bundle
+{{- end }}
+
+To inject CA certificates into a pod, add the annotation:
+
+  metadata:
+    annotations:
+      cainjekt.natron.io/enabled: "true"
+
+To check the DaemonSet status:
+  kubectl get daemonset {{ include "cainjekt.fullname" . }} -n {{ include "cainjekt.namespace" . }}
+
+To view logs:
+  kubectl logs -n {{ include "cainjekt.namespace" . }} -l {{ include "cainjekt.selectorLabels" . | replace ": " "=" | replace "\n" "," }} -f

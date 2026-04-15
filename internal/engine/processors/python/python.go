@@ -1,11 +1,12 @@
+// Package python provides a Python CA injection processor.
 package python
 
 import (
 	"strings"
 
-	hookapi "github.com/tsuzu/cainjekt/internal/engine/api"
-	"github.com/tsuzu/cainjekt/internal/util/containerfs"
-	"github.com/tsuzu/cainjekt/internal/util/envutil"
+	hookapi "github.com/natrontech/cainjekt/internal/engine/api"
+	"github.com/natrontech/cainjekt/internal/util/containerfs"
+	"github.com/natrontech/cainjekt/internal/util/envutil"
 )
 
 const (
@@ -28,6 +29,7 @@ var pythonBinaryCandidates = []string{
 
 type processor struct{}
 
+// New returns a Python CA injection processor.
 func New() hookapi.Processor {
 	return &processor{}
 }

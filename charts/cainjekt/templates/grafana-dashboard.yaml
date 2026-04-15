@@ -1,0 +1,317 @@
+{{- if .Values.grafanaDashboard.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "cainjekt.fullname" . }}-dashboard
+  namespace: {{ .Values.grafanaDashboard.namespace | default (include "cainjekt.namespace" .) }}
+  labels:
+    {{- include "cainjekt.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+    {{- with .Values.grafanaDashboard.labels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- with .Values.grafanaDashboard.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  cainjekt.json: |-
+    {
+      "annotations": {
+        "list": []
+      },
+      "description": "CA certificate injection metrics for cainjekt",
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "links": [],
+      "panels": [
+        {
+          "title": "Injection Overview",
+          "type": "row",
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+          "collapsed": false
+        },
+        {
+          "title": "Injections / min",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 8, "x": 0, "y": 1 },
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": { "fillOpacity": 20, "lineWidth": 2 }
+            }
+          },
+          "targets": [
+            {
+              "expr": "sum(rate(cainjekt_injections_total[1m])) by (instance)",
+              "legendFormat": "{{ `{{instance}}` }} total"
+            },
+            {
+              "expr": "sum(rate(cainjekt_injections_errors_total[1m])) by (instance)",
+              "legendFormat": "{{ `{{instance}}` }} errors"
+            }
+          ]
+        },
+        {
+          "title": "Injection Success Rate",
+          "type": "gauge",
+          "gridPos": { "h": 8, "w": 4, "x": 8, "y": 1 },
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "steps": [
+                  { "color": "red", "value": null },
+                  { "color": "orange", "value": 90 },
+                  { "color": "green", "value": 99 }
+                ]
+              },
+              "unit": "percent",
+              "min": 0,
+              "max": 100
+            }
+          },
+          "targets": [
+            {
+              "expr": "100 * (1 - (sum(rate(cainjekt_injections_errors_total[5m])) / clamp_min(sum(rate(cainjekt_injections_total[5m])), 1)))"
+            }
+          ]
+        },
+        {
+          "title": "Active Containers",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "thresholds": { "steps": [{ "color": "blue", "value": null }] }
+            }
+          },
+          "targets": [
+            {
+              "expr": "sum(cainjekt_active_containers)",
+              "legendFormat": "active"
+            }
+          ]
+        },
+        {
+          "title": "Skipped Containers",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 4, "x": 12, "y": 5 },
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "thresholds": { "steps": [{ "color": "text", "value": null }] }
+            }
+          },
+          "targets": [
+            {
+              "expr": "sum(cainjekt_skipped_total)",
+              "legendFormat": "skipped"
+            }
+          ]
+        },
+        {
+          "title": "Total Injections",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "thresholds": { "steps": [{ "color": "green", "value": null }] }
+            }
+          },
+          "targets": [
+            {
+              "expr": "sum(cainjekt_injections_total)",
+              "legendFormat": "total"
+            }
+          ]
+        },
+        {
+          "title": "Total Errors",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 4, "x": 16, "y": 5 },
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "red", "value": 1 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            {
+              "expr": "sum(cainjekt_injections_errors_total)",
+              "legendFormat": "errors"
+            }
+          ]
+        },
+        {
+          "title": "Orphans Cleaned",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "thresholds": { "steps": [{ "color": "text", "value": null }] }
+            }
+          },
+          "targets": [
+            {
+              "expr": "sum(cainjekt_orphans_cleaned_total)",
+              "legendFormat": "orphans"
+            }
+          ]
+        },
+        {
+          "title": "Cleanup Errors",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 4, "x": 20, "y": 5 },
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "thresholds": {
+                "steps": [
+                  { "color": "green", "value": null },
+                  { "color": "orange", "value": 1 }
+                ]
+              }
+            }
+          },
+          "targets": [
+            {
+              "expr": "sum(cainjekt_cleanups_errors_total)",
+              "legendFormat": "errors"
+            }
+          ]
+        },
+        {
+          "title": "Processors",
+          "type": "row",
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
+          "collapsed": false
+        },
+        {
+          "title": "Processor Detection Rate",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 10 },
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": { "fillOpacity": 10, "lineWidth": 2 }
+            }
+          },
+          "targets": [
+            {
+              "expr": "sum by (processor) (rate(cainjekt_processor_detected_total[5m]))",
+              "legendFormat": "{{ `{{processor}}` }}"
+            }
+          ]
+        },
+        {
+          "title": "Processor Application Rate",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 10 },
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": { "fillOpacity": 10, "lineWidth": 2 }
+            }
+          },
+          "targets": [
+            {
+              "expr": "sum by (processor) (rate(cainjekt_processor_applied_total[5m]))",
+              "legendFormat": "{{ `{{processor}}` }}"
+            }
+          ]
+        },
+        {
+          "title": "Operations",
+          "type": "row",
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 },
+          "collapsed": false
+        },
+        {
+          "title": "Cleanups / min",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 19 },
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": { "fillOpacity": 20, "lineWidth": 2 }
+            }
+          },
+          "targets": [
+            {
+              "expr": "sum(rate(cainjekt_cleanups_total[1m])) by (instance)",
+              "legendFormat": "{{ `{{instance}}` }} cleanups"
+            },
+            {
+              "expr": "sum(rate(cainjekt_orphans_cleaned_total[1m])) by (instance)",
+              "legendFormat": "{{ `{{instance}}` }} orphans"
+            }
+          ]
+        },
+        {
+          "title": "Go Runtime",
+          "type": "timeseries",
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 19 },
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "palette-classic" },
+              "custom": { "fillOpacity": 10, "lineWidth": 2 },
+              "unit": "bytes"
+            }
+          },
+          "targets": [
+            {
+              "expr": "sum(go_memstats_alloc_bytes{job=~\".*cainjekt.*\"}) by (instance)",
+              "legendFormat": "{{ `{{instance}}` }} heap alloc"
+            },
+            {
+              "expr": "sum(process_resident_memory_bytes{job=~\".*cainjekt.*\"}) by (instance)",
+              "legendFormat": "{{ `{{instance}}` }} RSS"
+            }
+          ]
+        }
+      ],
+      "schemaVersion": 39,
+      "tags": ["cainjekt", "kubernetes", "certificates"],
+      "templating": {
+        "list": [
+          {
+            "current": { "selected": false, "text": "Prometheus", "value": "prometheus" },
+            "hide": 0,
+            "includeAll": false,
+            "label": "Datasource",
+            "multi": false,
+            "name": "datasource",
+            "options": [],
+            "query": "prometheus",
+            "refresh": 1,
+            "type": "datasource"
+          }
+        ]
+      },
+      "time": { "from": "now-1h", "to": "now" },
+      "title": "cainjekt",
+      "uid": "cainjekt-overview"
+    }
+{{- end }}

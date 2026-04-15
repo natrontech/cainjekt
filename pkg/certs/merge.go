@@ -1,3 +1,4 @@
+// Package certs provides PEM certificate parsing and merging utilities.
 package certs
 
 import (
@@ -8,11 +9,13 @@ import (
 	"fmt"
 )
 
+// MergeResult holds the outcome of merging PEM certificate bundles.
 type MergeResult struct {
 	Merged []byte
 	Added  int
 }
 
+// MergePEM deduplicates and appends PEM certificates from addition into existing.
 func MergePEM(existing []byte, addition []byte) (MergeResult, error) {
 	existingHashes := map[[sha256.Size]byte]struct{}{}
 	for _, block := range parseCertPEMBlocks(existing) {
@@ -51,6 +54,20 @@ func MergePEM(existing []byte, addition []byte) (MergeResult, error) {
 		out.WriteByte('\n')
 	}
 	return MergeResult{Merged: out.Bytes(), Added: len(additions)}, nil
+}
+
+// ValidatePEM checks that data contains at least one valid PEM-encoded certificate.
+func ValidatePEM(data []byte) error {
+	blocks := parseCertPEMBlocks(data)
+	if len(blocks) == 0 {
+		return fmt.Errorf("no PEM certificate blocks found")
+	}
+	for i, block := range blocks {
+		if _, err := x509.ParseCertificate(block.Bytes); err != nil {
+			return fmt.Errorf("certificate %d is invalid: %w", i+1, err)
+		}
+	}
+	return nil
 }
 
 func parseCertPEMBlocks(data []byte) []*pem.Block {

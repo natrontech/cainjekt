@@ -1,11 +1,12 @@
+// Package nodejs provides a Node.js CA injection processor.
 package nodejs
 
 import (
 	"strings"
 
-	hookapi "github.com/tsuzu/cainjekt/internal/engine/api"
-	"github.com/tsuzu/cainjekt/internal/util/containerfs"
-	"github.com/tsuzu/cainjekt/internal/util/envutil"
+	hookapi "github.com/natrontech/cainjekt/internal/engine/api"
+	"github.com/natrontech/cainjekt/internal/util/containerfs"
+	"github.com/natrontech/cainjekt/internal/util/envutil"
 )
 
 const (
@@ -25,6 +26,7 @@ var nodeBinaryCandidates = []string{
 
 type processor struct{}
 
+// New returns a Node.js CA injection processor.
 func New() hookapi.Processor {
 	return &processor{}
 }

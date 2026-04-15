@@ -1,3 +1,4 @@
+// Package hook implements the OCI CreateRuntime hook for CA injection.
 package hook
 
 import (
@@ -6,13 +7,14 @@ import (
 	"os"
 	"strings"
 
-	"github.com/tsuzu/cainjekt/internal/config"
-	hookapi "github.com/tsuzu/cainjekt/internal/engine/api"
-	"github.com/tsuzu/cainjekt/internal/engine/processors"
-	"github.com/tsuzu/cainjekt/internal/runtime/hookctx"
-	"github.com/tsuzu/cainjekt/internal/util/oci"
+	"github.com/natrontech/cainjekt/internal/config"
+	hookapi "github.com/natrontech/cainjekt/internal/engine/api"
+	"github.com/natrontech/cainjekt/internal/engine/processors"
+	"github.com/natrontech/cainjekt/internal/runtime/hookctx"
+	"github.com/natrontech/cainjekt/internal/util/oci"
 )
 
+// Run executes the OCI hook phase: detects processors, applies CA injection, and persists wrapper context.
 func Run(log *slog.Logger) error {
 	mode := strings.ToLower(strings.TrimSpace(os.Getenv(config.EnvHookMode)))
 	if mode != config.ModeCreateRT && mode != config.ModeCreateCtr {
@@ -40,15 +42,23 @@ func Run(log *slog.Logger) error {
 	}
 
 	all := processors.Default()
-	include := processors.ParseCSV(ctx.Annotations[config.AnnoProcessorsInclude])
-	exclude := processors.ParseCSV(ctx.Annotations[config.AnnoProcessorsExclude])
+	include := processors.ParseCSV(ctx.Annotations[config.AnnoProcessorsInclude()])
+	exclude := processors.ParseCSV(ctx.Annotations[config.AnnoProcessorsExclude()])
 	filtered := processors.FilterByNames(all, include, exclude)
+
+	log.Info("running hook",
+		"mode", mode,
+		"rootfs", ctx.Rootfs,
+		"ca_file", ctx.CAFile,
+		"processors", len(filtered),
+	)
 
 	detected := runProcessors(ctx, filtered)
 	if err := persistWrapperContext(ctx, detected); err != nil {
 		return err
 	}
 
+	var applied, skipped, failed int
 	for _, r := range ctx.Results {
 		log.Info("processor result",
 			"name", r.Name,
@@ -58,7 +68,28 @@ func Run(log *slog.Logger) error {
 			"reason", r.Reason,
 			"error", r.Err,
 		)
+		switch {
+		case r.Applied:
+			applied++
+		case r.Skipped:
+			skipped++
+		default:
+			failed++
+		}
 	}
+
+	// Log read-only rootfs detection.
+	if v, ok := ctx.Facts.Get(hookapi.FactRootfsReadOnly); ok && v == "true" {
+		log.Warn("rootfs is read-only, OS trust store was not modified; language processors will use dynamic CA path")
+	}
+
+	log.Info("hook complete",
+		"applied", applied,
+		"skipped", skipped,
+		"failed", failed,
+		"distro", factOrEmpty(ctx, hookapi.FactDistro),
+		"trust_store", factOrEmpty(ctx, hookapi.FactTrustStorePath),
+	)
 
 	return nil
 }
@@ -80,13 +111,31 @@ func runProcessors(ctx *hookapi.Context, list []hookapi.Processor) []hookctx.Det
 			Reason:     d.Detect.Reason,
 		})
 		if !d.Detect.Applicable {
-			ctx.AddResult(hookapi.ProcessorResult{Name: d.Processor.Name(), Category: d.Processor.Category(), Skipped: true, Reason: d.Detect.Reason})
+			ctx.AddResult(hookapi.ProcessorResult{
+				Name:     d.Processor.Name(),
+				Category: d.Processor.Category(),
+				Skipped:  true,
+				Reason:   d.Detect.Reason,
+			})
 			continue
 		}
 		err := d.Processor.Apply(ctx)
-		ctx.AddResult(hookapi.ProcessorResult{Name: d.Processor.Name(), Category: d.Processor.Category(), Applied: err == nil, Err: err})
+		ctx.AddResult(hookapi.ProcessorResult{
+			Name:     d.Processor.Name(),
+			Category: d.Processor.Category(),
+			Applied:  err == nil,
+			Err:      err,
+		})
 	}
 	return persisted
+}
+
+func factOrEmpty(ctx *hookapi.Context, key hookapi.FactKey) string {
+	if ctx == nil || ctx.Facts == nil {
+		return ""
+	}
+	v, _ := ctx.Facts.Get(key)
+	return v
 }
 
 func getenvOr(key, fallback string) string {

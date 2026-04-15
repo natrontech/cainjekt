@@ -41,12 +41,12 @@ The project provides pre-built container images on GitHub Container Registry:
 
 ```bash
 # Images are available at:
-# ghcr.io/tsuzu/cainjekt:latest (latest main branch)
-# ghcr.io/tsuzu/cainjekt:v1.0.0 (specific version)
-# ghcr.io/tsuzu/cainjekt:main-<sha> (specific commit)
+# ghcr.io/natrontech/cainjekt:latest (latest main branch)
+# ghcr.io/natrontech/cainjekt:v1.0.0 (specific version)
+# ghcr.io/natrontech/cainjekt:main-<sha> (specific commit)
 
 # Supports both amd64 and arm64 architectures
-docker pull ghcr.io/tsuzu/cainjekt:latest
+docker pull ghcr.io/natrontech/cainjekt:latest
 ```
 
 The kustomization.yaml already points to the GHCR image. If you want to use a different image, update the `newName` in `kustomization.yaml`.
@@ -117,7 +117,7 @@ kind: Pod
 metadata:
   name: test-ca-injection
   annotations:
-    cainjekt.io/enabled: "true"
+    cainjekt.natron.io/enabled: "true"
 spec:
   containers:
   - name: test
@@ -141,6 +141,8 @@ The DaemonSet supports the following environment variables:
 - `CAINJEKT_CA_FILE`: Path to the CA bundle file (default: `/etc/cainjekt/ca-bundle.pem`)
 - `CAINJEKT_DYNAMIC_CA_ROOT`: Root directory for per-container CA staging (default: `/run/cainjekt/containers`)
 - `CAINJEKT_FAIL_POLICY`: Failure policy, either `fail-open` or `fail-closed` (default: `fail-open`)
+- `CAINJEKT_ANNOTATION_PREFIX`: Annotation prefix for pod opt-in (default: `cainjekt.natron.io`)
+- `CAINJEKT_LOG_LEVEL`: Log level: `debug`, `info`, `warn`, `error` (default: `info`)
 
 ### Pod Annotations
 
@@ -149,7 +151,7 @@ To enable CA injection for a specific pod, add the following annotation:
 ```yaml
 metadata:
   annotations:
-    cainjekt.io/enabled: "true"
+    cainjekt.natron.io/enabled: "true"
 ```
 
 ### Processor Selection
@@ -159,9 +161,9 @@ You can include or exclude specific processors using annotations:
 ```yaml
 metadata:
   annotations:
-    cainjekt.io/enabled: "true"
-    cainjekt.io/processors.include: "osstore,lang-nodejs,lang-python"
-    cainjekt.io/processors.exclude: "java"
+    cainjekt.natron.io/enabled: "true"
+    cainjekt.natron.io/processors.include: "osstore,lang-nodejs,lang-python"
+    cainjekt.natron.io/processors.exclude: "java"
 ```
 
 Language-specific processors currently include:
