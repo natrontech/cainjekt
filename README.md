@@ -10,7 +10,9 @@ Transparent CA certificate injection for Kubernetes containers using containerd 
 - Uses containerd NRI for transparent integration with the container runtime
 - Per-container dynamic CA bundle staging with atomic writes and symlink protection
 - Supports multiple OS distributions (Debian, Ubuntu, Alpine, RHEL, Fedora, Arch, openSUSE)
-- Language-specific processors for Java (`JAVA_TOOL_OPTIONS`), Node.js (`NODE_EXTRA_CA_CERTS`), and Python (`SSL_CERT_FILE`)
+- Language-specific processors for Go, Java, Node.js, Python, and Ruby
+- Prometheus metrics endpoint (`/metrics`), health (`/healthz`) and readiness (`/readyz`) probes
+- Namespace-level opt-in via labels (in addition to per-pod annotations)
 - Configurable annotation prefix (default: `cainjekt.natron.io`)
 - Minimal distroless container image (~15MB)
 - Multi-architecture support (amd64, arm64)
@@ -91,6 +93,7 @@ Both `linux/amd64` and `linux/arm64` platforms are supported.
 | `CAINJEKT_CA_FILE` | `/etc/cainjekt/ca-bundle.pem` | Path to CA bundle |
 | `CAINJEKT_ANNOTATION_PREFIX` | `cainjekt.natron.io` | Annotation prefix for pod opt-in |
 | `CAINJEKT_FAIL_POLICY` | `fail-open` | `fail-open` or `fail-closed` |
+| `CAINJEKT_LOG_LEVEL` | `info` | Log level: `debug`, `info`, `warn`, `error` |
 | `CAINJEKT_DYNAMIC_CA_ROOT` | `/run/cainjekt/containers` | Per-container CA staging root |
 
 ## Known Limitations

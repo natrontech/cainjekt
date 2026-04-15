@@ -54,10 +54,17 @@ plugin:
 
 ## @param annotationPrefix Annotation prefix for pod opt-in (e.g. "cainjekt.natron.io")
 ## Pods use `<prefix>/enabled: "true"` to opt in to CA injection.
+## Can also be set as a namespace label for namespace-wide opt-in.
 annotationPrefix: "cainjekt.natron.io"
 
 ## @param failPolicy Policy when hook fails: "fail-open" (default) or "fail-closed"
 failPolicy: "fail-open"
+
+## @param logLevel Log level: debug, info, warn, error
+logLevel: "info"
+
+## @param metricsPort Port for health/readiness/metrics HTTP server
+metricsPort: 9443
 
 ## @section DaemonSet parameters
 
