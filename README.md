@@ -139,6 +139,13 @@ make lint           # golangci-lint
 make helm-lint      # Lint Helm chart
 ```
 
+## Documentation
+
+- [Architecture Deep-Dive](docs/architecture.md) — injection pipeline, processor system, security model
+- [Usage Guide](docs/usage.md) — installation, configuration, verification, troubleshooting
+- [Why We Forked](docs/why-we-forked.md) — what changed vs upstream and why
+- [Kubernetes Deployment (kustomize)](deploy/kubernetes/README.md) — step-by-step kustomize deployment
+
 ## Requirements
 
 - Kubernetes cluster with containerd runtime
