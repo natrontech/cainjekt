@@ -3,6 +3,7 @@ package wrapper
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"strings"
@@ -15,6 +16,8 @@ import (
 
 // Run executes the wrapper phase: applies language-specific env vars and execs the original entrypoint.
 func Run() error {
+	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
+
 	if len(os.Args) < 2 {
 		return fmt.Errorf("wrapper requires original command in argv[1:]")
 	}
@@ -26,6 +29,7 @@ func Run() error {
 	ctx := state.ToHookContext()
 	ctx.Env = os.Environ()
 
+	var applied int
 	for _, d := range state.Detected {
 		if !d.Applicable {
 			continue
@@ -41,7 +45,11 @@ func Run() error {
 		if err := wp.ApplyWrapper(ctx); err != nil {
 			return fmt.Errorf("wrapper processor %q failed: %w", wp.Name(), err)
 		}
+		log.Info("wrapper processor applied", "name", wp.Name())
+		applied++
 	}
+
+	log.Info("wrapper complete", "applied", applied, "command", os.Args[1])
 
 	env, err := applyContextEnv(ctx.Env)
 	if err != nil {

@@ -117,6 +117,13 @@ func (p *Plugin) CreateContainer(
 		Source:      self,
 		Options:     []string{"bind", "ro"},
 	})
+	// Writable tmpfs for hook context file — ensures persistence even on read-only rootfs.
+	adjustment.AddMount(&api.Mount{
+		Destination: "/etc/cainjekt",
+		Type:        "tmpfs",
+		Source:      "tmpfs",
+		Options:     []string{"nosuid", "noexec", "nodev", "size=1m"},
+	})
 	adjustment.AddHooks(&api.Hooks{CreateRuntime: []*api.Hook{hook}})
 	return adjustment, nil, nil
 }

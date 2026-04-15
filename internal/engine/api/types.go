@@ -10,6 +10,7 @@ const (
 	FactTrustStoreKind   FactKey = "trust_store_kind"
 	FactDistro           FactKey = "distro"
 	FactIndividualCAPath FactKey = "individual_ca_path"
+	FactRootfsReadOnly   FactKey = "rootfs_read_only"
 )
 
 // DetectResult reports whether a processor is applicable to a container.

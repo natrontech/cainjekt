@@ -147,6 +147,18 @@ func (p *processor) Apply(ctx *hookapi.Context) error {
 		return err
 	}
 
+	// Check if rootfs is writable before attempting modifications.
+	if !isRootfsWritable(ctx.Rootfs) {
+		ctx.Facts.Set(hookapi.FactRootfsReadOnly, "true")
+		ctx.Facts.Set(hookapi.FactTrustStorePath, targetContainer)
+		ctx.Facts.Set(hookapi.FactDistro, p.distro)
+		// Use the dynamic CA file directly — it's on a host-mounted writable path.
+		if ctx.CAFile != "" {
+			ctx.Facts.Set(hookapi.FactIndividualCAPath, ctx.CAFile)
+		}
+		return nil
+	}
+
 	current, err := os.ReadFile(targetHost)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("failed to read trust store %s: %w", targetHost, err)
@@ -410,4 +422,15 @@ func (p *processor) matches(info osRelease) bool {
 		}
 	}
 	return false
+}
+
+func isRootfsWritable(rootfs string) bool {
+	probe := filepath.Join(rootfs, ".cainjekt-probe")
+	f, err := os.Create(probe)
+	if err != nil {
+		return false
+	}
+	_ = f.Close()
+	_ = os.Remove(probe)
+	return true
 }

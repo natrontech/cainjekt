@@ -46,11 +46,19 @@ func Run(log *slog.Logger) error {
 	exclude := processors.ParseCSV(ctx.Annotations[config.AnnoProcessorsExclude()])
 	filtered := processors.FilterByNames(all, include, exclude)
 
+	log.Info("running hook",
+		"mode", mode,
+		"rootfs", ctx.Rootfs,
+		"ca_file", ctx.CAFile,
+		"processors", len(filtered),
+	)
+
 	detected := runProcessors(ctx, filtered)
 	if err := persistWrapperContext(ctx, detected); err != nil {
 		return err
 	}
 
+	var applied, skipped, failed int
 	for _, r := range ctx.Results {
 		log.Info("processor result",
 			"name", r.Name,
@@ -60,7 +68,28 @@ func Run(log *slog.Logger) error {
 			"reason", r.Reason,
 			"error", r.Err,
 		)
+		switch {
+		case r.Applied:
+			applied++
+		case r.Skipped:
+			skipped++
+		default:
+			failed++
+		}
 	}
+
+	// Log read-only rootfs detection.
+	if v, ok := ctx.Facts.Get(hookapi.FactRootfsReadOnly); ok && v == "true" {
+		log.Warn("rootfs is read-only, OS trust store was not modified; language processors will use dynamic CA path")
+	}
+
+	log.Info("hook complete",
+		"applied", applied,
+		"skipped", skipped,
+		"failed", failed,
+		"distro", factOrEmpty(ctx, hookapi.FactDistro),
+		"trust_store", factOrEmpty(ctx, hookapi.FactTrustStorePath),
+	)
 
 	return nil
 }
@@ -99,6 +128,14 @@ func runProcessors(ctx *hookapi.Context, list []hookapi.Processor) []hookctx.Det
 		})
 	}
 	return persisted
+}
+
+func factOrEmpty(ctx *hookapi.Context, key hookapi.FactKey) string {
+	if ctx == nil || ctx.Facts == nil {
+		return ""
+	}
+	v, _ := ctx.Facts.Get(key)
+	return v
 }
 
 func getenvOr(key, fallback string) string {

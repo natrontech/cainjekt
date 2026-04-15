@@ -51,7 +51,7 @@ make copy-plugin              # Copy binary to kind node
 - `api/types.go`: Core interfaces — `Processor` (Detect/Apply) and `WrapperProcessor` (adds ApplyWrapper for env var injection)
 - `processors/registry.go`: Global registry with priority-based detection, include/exclude filtering via pod annotations
 - `processors/osstore/`: OS CA store processors (debian, rhel, alpine, arch, opensuse, fallback) — priority 275-300
-- `processors/nodejs/`, `processors/python/`: Language processors (NODE_EXTRA_CA_CERTS, SSL_CERT_FILE) — priority 100
+- `processors/java/`, `processors/nodejs/`, `processors/python/`: Language processors (JAVA_TOOL_OPTIONS, NODE_EXTRA_CA_CERTS, SSL_CERT_FILE) — priority 100
 
 **Key flow**: NRI intercepts container creation → stages CA file in `/run/cainjekt/containers/{id}/` → OCI hook detects OS and patches trust stores → wrapper sets env vars and execs original entrypoint.
 
@@ -59,12 +59,10 @@ make copy-plugin              # Copy binary to kind node
 
 ## Known Limitations
 
-- **Silent failures**: `fail-open` policy means containers start without CA on any error — no signal
+- **Silent failures**: `fail-open` policy means containers start without CA on error — check logs for warnings
 - **Static binaries** (Go, Rust): CA verification compiled in, ignores system stores — injection doesn't help
-- **Java**: No JKS keystore processor exists
 - **Distroless/scratch images**: No `/etc/os-release`, minimal writable FS — fallback unreliable
-- **Read-only root filesystems**: Hook can't write to trust stores, fails silently
-- Only 2 language processors (Node.js, Python)
+- **Read-only root filesystems**: OS trust store not modified, but language processors still work via env vars + dynamic CA path
 
 ## Testing Notes
 

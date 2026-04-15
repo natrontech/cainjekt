@@ -10,7 +10,7 @@ Transparent CA certificate injection for Kubernetes containers using containerd 
 - Uses containerd NRI for transparent integration with the container runtime
 - Per-container dynamic CA bundle staging with atomic writes and symlink protection
 - Supports multiple OS distributions (Debian, Ubuntu, Alpine, RHEL, Fedora, Arch, openSUSE)
-- Language-specific processors for Node.js (`NODE_EXTRA_CA_CERTS`) and Python (`SSL_CERT_FILE`)
+- Language-specific processors for Java (`JAVA_TOOL_OPTIONS`), Node.js (`NODE_EXTRA_CA_CERTS`), and Python (`SSL_CERT_FILE`)
 - Configurable annotation prefix (default: `cainjekt.natron.io`)
 - Minimal distroless container image (~15MB)
 - Multi-architecture support (amd64, arm64)
@@ -96,10 +96,9 @@ Both `linux/amd64` and `linux/arm64` platforms are supported.
 ## Known Limitations
 
 - **Static binaries** (Go, Rust): CA verification is compiled in — system stores are ignored
-- **Java**: No JKS keystore processor (yet)
-- **Distroless/scratch images**: No `/etc/os-release`, limited writable filesystem
-- **Read-only root filesystems**: Hook cannot write to trust stores
-- **Fail-open default**: Failed injection is silent — container starts without CA
+- **Distroless/scratch images**: No `/etc/os-release`, limited writable filesystem — fallback processor may not detect the correct trust store
+- **Read-only root filesystems**: OS trust store cannot be modified, but language processors (Java, Node.js, Python) still work via env vars pointing to the dynamic CA path
+- **Fail-open default**: Failed injection is silent — container starts without CA (check pod logs for warnings)
 
 ## Building from Source
 
