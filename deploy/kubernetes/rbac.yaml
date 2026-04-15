@@ -13,12 +13,12 @@ metadata:
   labels:
     app: cainjekt
 rules:
-# NRI plugins typically don't need extensive RBAC permissions
-# as they interact with the container runtime via NRI socket
-# Add permissions here if needed for future features
 - apiGroups: [""]
   resources: ["nodes"]
   verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["namespaces"]
+  verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

@@ -23,6 +23,7 @@ type Plugin struct {
 	log     *slog.Logger
 	metrics *Metrics
 	tracked sync.Map // map[string]struct{} — sanitized container IDs
+	nsCache *nsLabelCache
 }
 
 // Run starts the NRI plugin, HTTP server, orphan cleaner, and blocks until shutdown.
@@ -44,7 +45,8 @@ func Run(log *slog.Logger, args []string) error {
 	}
 
 	metrics := newMetrics()
-	p := &Plugin{log: log, metrics: metrics}
+	nsCache := newNSLabelCache()
+	p := &Plugin{log: log, metrics: metrics, nsCache: nsCache}
 
 	opts := []stub.Option{stub.WithOnClose(p.onClose)}
 	if pluginName != "" {
@@ -115,7 +117,7 @@ func (p *Plugin) CreateContainer(
 ) (*api.ContainerAdjustment, []*api.ContainerUpdate, error) {
 	p.log.Info("create container", "namespace", pod.GetNamespace(), "pod", pod.GetName(), "container", ctr.GetName())
 
-	if !shouldInject(pod) {
+	if !shouldInject(pod, p.nsCache) {
 		p.metrics.SkippedTotal.Inc()
 		return nil, nil, nil
 	}
@@ -191,7 +193,7 @@ func (p *Plugin) RemoveContainer(_ context.Context, pod *api.PodSandbox, ctr *ap
 		}
 	}
 
-	if !shouldInject(pod) {
+	if !shouldInject(pod, p.nsCache) {
 		return nil
 	}
 	p.metrics.CleanupsTotal.Inc()
