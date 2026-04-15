@@ -116,3 +116,25 @@ serviceAccount:
 rbac:
   ## @param rbac.create Create ClusterRole and ClusterRoleBinding
   create: true
+
+## @section Monitoring parameters
+
+serviceMonitor:
+  ## @param serviceMonitor.enabled Create a ServiceMonitor for Prometheus Operator
+  enabled: false
+  ## @param serviceMonitor.interval Scrape interval
+  interval: "30s"
+  ## @param serviceMonitor.scrapeTimeout Scrape timeout
+  scrapeTimeout: ""
+  ## @param serviceMonitor.labels Extra labels for the ServiceMonitor (e.g. release: prometheus)
+  labels: {}
+
+## @section Disruption parameters
+
+podDisruptionBudget:
+  ## @param podDisruptionBudget.enabled Create a PodDisruptionBudget
+  enabled: false
+  ## @param podDisruptionBudget.maxUnavailable Max unavailable pods during disruption
+  maxUnavailable: 1
+  ## @param podDisruptionBudget.minAvailable Min available pods (mutually exclusive with maxUnavailable)
+  minAvailable: ""

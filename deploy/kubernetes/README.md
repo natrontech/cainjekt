@@ -142,6 +142,7 @@ The DaemonSet supports the following environment variables:
 - `CAINJEKT_DYNAMIC_CA_ROOT`: Root directory for per-container CA staging (default: `/run/cainjekt/containers`)
 - `CAINJEKT_FAIL_POLICY`: Failure policy, either `fail-open` or `fail-closed` (default: `fail-open`)
 - `CAINJEKT_ANNOTATION_PREFIX`: Annotation prefix for pod opt-in (default: `cainjekt.natron.io`)
+- `CAINJEKT_LOG_LEVEL`: Log level: `debug`, `info`, `warn`, `error` (default: `info`)
 
 ### Pod Annotations
 

@@ -103,6 +103,32 @@ Both `linux/amd64` and `linux/arm64` platforms are supported.
 - **Read-only root filesystems**: OS trust store cannot be modified, but language processors (Java, Node.js, Python) still work via env vars pointing to the dynamic CA path
 - **Fail-open default**: Failed injection is silent — container starts without CA (check pod logs for warnings)
 
+## Language Processors
+
+| Processor | Env Var Set | Detection |
+|-----------|------------|-----------|
+| `lang-go` | `SSL_CERT_FILE` | `/usr/local/go/bin/go` |
+| `lang-java` | `JAVA_TOOL_OPTIONS` (trustStore + PEM type) | `/usr/bin/java` |
+| `lang-nodejs` | `NODE_EXTRA_CA_CERTS` | `/usr/bin/node` |
+| `lang-python` | `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE` | `/usr/bin/python3` |
+| `lang-ruby` | `SSL_CERT_FILE` | `/usr/bin/ruby` |
+
+## Observability
+
+The NRI plugin exposes a Prometheus-compatible metrics endpoint on `:9443`:
+
+- `GET /metrics` — Prometheus metrics (injection counts, errors, processor stats, active containers)
+- `GET /healthz` — liveness probe
+- `GET /readyz` — readiness probe
+
+Enable Prometheus Operator scraping via Helm:
+
+```bash
+helm install cainjekt charts/cainjekt \
+  --set serviceMonitor.enabled=true \
+  --set serviceMonitor.labels.release=prometheus
+```
+
 ## Building from Source
 
 ```bash
