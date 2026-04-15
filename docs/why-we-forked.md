@@ -1,97 +1,94 @@
 # Why We Forked
 
-cainjekt is a fork of [tsuzu/cainjekt](https://github.com/tsuzu/cainjekt). This document explains what we changed and why.
+## The Problem We're Solving
 
-## The Original Project
+Every enterprise Kubernetes platform that uses TLS inspection, internal PKI, or self-signed certificates faces the same pain: **containers don't trust your CAs**. Teams work around this by baking certificates into images, mounting volumes, or adding init containers — all of which are fragile, error-prone, and don't scale.
 
-The original cainjekt by [tsuzu](https://github.com/tsuzu) is a well-engineered CA injection tool for Kubernetes using containerd NRI. It supports Debian, Ubuntu, Alpine, RHEL, Fedora, Arch, and openSUSE distributions with Node.js and Python language processors. The code is clean, secure (atomic writes, symlink protection), and the architecture is extensible.
+We needed transparent, zero-touch CA injection across our entire container platform. No image changes, no pod spec changes, no developer burden.
 
-We evaluated it for use on our Kubernetes container platform and found it to be safe, legitimate, and a strong foundation — but it needed several changes to be production-ready for our use case.
+## Why This Project
+
+[tsuzu/cainjekt](https://github.com/tsuzu/cainjekt) is a clever proof-of-concept that uses containerd NRI to solve exactly this problem. The architecture is sound — a three-phase pipeline (NRI plugin → OCI hook → entrypoint wrapper) that transparently patches trust stores and sets language-specific environment variables.
+
+We evaluated it thoroughly (including a full security review of every source file) and found:
+
+- Clean, well-engineered Go code with proper error handling
+- Solid security practices (atomic writes, symlink protection, no network calls)
+- An extensible processor system that makes it easy to add support for new distros and languages
+- No malicious code, no telemetry, no hidden functionality
+
+It's exactly the foundation we wanted.
+
+## Why Fork Instead of Contribute Upstream
+
+The original project is maintained by a single individual with no organization behind it. It has 12 stars, no other forks, and the last activity was March 2026. For a component that runs as a privileged DaemonSet on every node in our production clusters, we need:
+
+- **Ownership and accountability** — we need to be able to ship fixes on our own timeline
+- **Production hardening** — the original is a great MVP but needed significant work for production use (see below)
+- **Organizational backing** — [natrontech](https://github.com/natrontech) provides a stable home with multiple maintainers
+- **Release infrastructure** — Helm chart publishing, multi-arch images, CI/CD, Prometheus integration
+
+We believe this project has significant potential beyond our own use case. Every Kubernetes platform with custom CAs faces this exact problem, and there's no good open-source solution. By forking under an organization, we can build a community around it.
+
+**We are open for contributions.** See [CONTRIBUTING.md](../CONTRIBUTING.md) for how to get involved.
 
 ## What We Changed
 
-### Annotation Prefix
+The core architecture is unchanged — we kept the three-phase pipeline, the processor registry, the per-container CA staging, and the fail-open design. Our changes add production-readiness on top of it.
 
-**Before:** `cainjekt.io/enabled` (hardcoded)
-**After:** `cainjekt.natron.io/enabled` (configurable via `CAINJEKT_ANNOTATION_PREFIX`)
+### Production Safety
 
-We don't own the `cainjekt.io` domain. Using it would create confusion about which version is running and potential conflicts if the upstream project publishes something there. The prefix is now configurable so any organization can use their own domain.
-
-### Go Module Path
-
-**Before:** `github.com/tsuzu/cainjekt`
-**After:** `github.com/natrontech/cainjekt`
-
-Clean module ownership for our fork.
-
-### Container Registry
-
-**Before:** `ghcr.io/tsuzu/cainjekt`
-**After:** `ghcr.io/natrontech/cainjekt`
-
-### Helm Chart
-
-The original project uses kustomize only. We added a Helm chart (`charts/cainjekt/`) because:
-
-- Helm is the standard package manager on our platform
-- Values-based configuration is easier to manage across environments
-- ServiceMonitor, PDB, PrometheusRule, and Grafana dashboard integration require Helm templates
-- OCI-based chart publishing integrates with our existing release pipeline
-
-### Additional Language Processors
-
-**Added:** Go (`SSL_CERT_FILE`), Java (`JAVA_TOOL_OPTIONS`), Ruby (`SSL_CERT_FILE`)
-
-The original had Node.js and Python only. Our platform runs Java, Go, and Ruby workloads that need CA injection.
-
-### Wrapper Fail-Open
-
-**Before:** If the wrapper failed (e.g., hook context missing, processor error), the container would not start — stuck in CrashLoopBackOff.
-**After:** The wrapper always execs the original command. Failures are logged as warnings but never block the container.
-
-This was a critical production safety issue in the original.
-
-### Read-Only Root Filesystem Support
-
-**Before:** Silently failed on read-only rootfs — container started without CA, no warning.
-**After:** Detects read-only rootfs, skips OS trust store modification, sets language env vars to point at the dynamic CA file (which is on a writable host-mounted path). Logs a clear warning.
+| Area | Before (upstream) | After (fork) |
+|------|-------------------|--------------|
+| Wrapper failure | Container blocked (CrashLoopBackOff) | Fail-open: always execs original command |
+| Read-only rootfs | Silent failure, no warning | Detected, skipped gracefully, language env vars still work |
+| CA bundle validation | None (invalid PEM staged silently) | PEM validated before staging, clear error on invalid |
+| Graceful shutdown | `os.Exit(1)` on NRI disconnect | SIGTERM/SIGINT handling, clean plugin stop |
+| Orphaned CA files | Accumulate indefinitely on crash | Background sweep every 5 minutes |
 
 ### Observability
 
-**Before:** Basic logging only. No metrics, no health probes, no status file.
-**After:**
-- Prometheus metrics endpoint (`:9443/metrics`) with injection counts, error rates, per-processor stats
-- Liveness and readiness probes (`/healthz`, `/readyz`)
-- `/etc/cainjekt/status.json` inside every injected container
-- Grafana dashboard (auto-provisioned via ConfigMap sidecar)
-- PrometheusRule alerting (high error rate, DaemonSet not ready, orphan accumulation)
-- Configurable log level (`CAINJEKT_LOG_LEVEL`)
+| Feature | Before | After |
+|---------|--------|-------|
+| Metrics | None | Prometheus endpoint (`:9443/metrics`) with 9+ metrics |
+| Health probes | None | `/healthz` and `/readyz` endpoints |
+| Status file | None | `/etc/cainjekt/status.json` in every injected container |
+| Alerting | None | PrometheusRule with 3 default alerts |
+| Dashboard | None | Grafana dashboard (auto-provisioned via sidecar) |
+| Log level | Hardcoded info | Configurable via `CAINJEKT_LOG_LEVEL` |
 
-### Operational Safety
+### Language Coverage
 
-- **Graceful shutdown**: SIGTERM/SIGINT handling with clean plugin stop
-- **Orphan cleanup**: Background sweep removes stale CA directories for crashed/removed containers
-- **CA bundle validation**: Rejects invalid PEM at staging time with clear error
-- **Namespace-level opt-in**: Pod labels and namespace labels work in addition to annotations
+| Processor | Before | After |
+|-----------|--------|-------|
+| Node.js (`NODE_EXTRA_CA_CERTS`) | Yes | Yes |
+| Python (`SSL_CERT_FILE`) | Yes | Yes |
+| Java (`JAVA_TOOL_OPTIONS`) | No | Yes |
+| Go (`SSL_CERT_FILE`) | No | Yes |
+| Ruby (`SSL_CERT_FILE`) | No | Yes |
 
-### Tooling
+### Platform Integration
 
-- golangci-lint configuration (20+ linters)
-- Dependabot (Go modules, GitHub Actions, Docker — monthly grouped)
-- Pre-commit hooks (gitleaks, checkov, standard file fixers)
-- Claude Code rules and settings for consistent AI-assisted development
-- CI: lint, unit tests, integration tests, E2E tests (kustomize + Helm), Docker build, Helm lint
-- Release workflow: multi-arch images + OCI Helm chart publishing
+| Feature | Before | After |
+|---------|--------|-------|
+| Deployment | Kustomize only | Helm chart + kustomize |
+| Annotation prefix | Hardcoded `cainjekt.io` | Configurable (default `cainjekt.natron.io`) |
+| Namespace opt-in | Per-pod only | Per-pod annotation + namespace label |
+| Helm: ServiceMonitor | No | Yes |
+| Helm: PodDisruptionBudget | No | Yes |
+| Helm: PrometheusRule | No | Yes |
+| Helm: Grafana dashboard | No | Yes |
+| Container registry | `ghcr.io/tsuzu` | `ghcr.io/natrontech` |
+| Go module path | `github.com/tsuzu/cainjekt` | `github.com/natrontech/cainjekt` |
 
-## What We Kept
+### Developer Experience
 
-The core architecture is unchanged:
-
-- Three-phase pipeline (NRI plugin → OCI hook → wrapper)
-- Priority-based processor registry with detection and application phases
-- Per-container dynamic CA staging with atomic writes
-- Symlink protection and ownership preservation
-- Fail-open hook policy
-- Distroless container image
-
-The original design is sound. Our changes add production-readiness on top of it.
+| Feature | Before | After |
+|---------|--------|-------|
+| Linting | None | golangci-lint (20+ linters) |
+| Dependabot | None | Go, GitHub Actions, Docker (monthly) |
+| Pre-commit hooks | None | gitleaks, checkov, standard fixers |
+| E2E tests | 1 (kustomize) | 5 (kustomize + Helm + init container + restart + status) |
+| CI | Basic (test + build) | Lint + test + integration + E2E + Helm lint + Docker build |
+| Release | Images only | Images + OCI Helm chart + GitHub release |
+| Documentation | README only | Architecture deep-dive, usage guide, fork rationale |

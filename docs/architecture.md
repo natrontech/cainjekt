@@ -19,10 +19,10 @@ cainjekt uses containerd's [Node Resource Interface (NRI)](https://github.com/co
 ┌──────────────────────────────────────────────────────────────────┐
 │ Node                                                             │
 │                                                                  │
-│  ┌─────────────┐     ┌─────────────┐     ┌─────────────────┐   │
-│  │ NRI Plugin   │────▶│ OCI Hook    │────▶│ Wrapper         │   │
-│  │ (DaemonSet)  │     │ (host ctx)  │     │ (container PID1)│   │
-│  └─────────────┘     └─────────────┘     └─────────────────┘   │
+│  ┌─────────────┐     ┌─────────────┐     ┌─────────────────┐     │
+│  │ NRI Plugin  │────▶│ OCI Hook    │────▶│ Wrapper         │     │
+│  │ (DaemonSet) │     │ (host ctx)  │     │ (container PID1)│     │
+│  └─────────────┘     └─────────────┘     └─────────────────┘     │
 │                                                                  │
 │  CreateContainer      CreateRuntime       Container Start        │
 │  event from           hook callback       entrypoint exec        │
