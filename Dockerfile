@@ -7,14 +7,17 @@ WORKDIR /workspace
 
 # Copy go mod files
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
 
 # Copy source code
 COPY . .
 
 # Build the binary
-RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
-    go build -a -ldflags="-s -w" -trimpath -o cainjekt ./cmd/cainjekt
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} \
+    go build -ldflags="-s -w" -trimpath -o cainjekt ./cmd/cainjekt
 
 # Installer image with shell for initContainer
 FROM debian:12-slim AS installer

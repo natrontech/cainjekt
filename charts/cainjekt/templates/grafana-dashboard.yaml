@@ -118,46 +118,36 @@ data:
           "gridPos": { "h": 6, "w": 12, "x": 0, "y": 11 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
           "fieldConfig": {
-            "defaults": {
-              "custom": { "align": "center" }
-            },
+            "defaults": { "custom": { "align": "center" } },
             "overrides": [
-              { "matcher": { "id": "byName", "options": "node" }, "properties": [{ "id": "displayName", "value": "Node" }] },
-              { "matcher": { "id": "byName", "options": "Value" }, "properties": [{ "id": "displayName", "value": "Status" }, { "id": "mappings", "value": [{ "options": { "0": { "text": "No NRI", "color": "red" }, "1": { "text": "NRI OK", "color": "green" } }, "type": "value" }] }, { "id": "custom.cellOptions", "value": { "type": "color-text" } }] },
-              { "matcher": { "id": "byName", "options": "Time" }, "properties": [{ "id": "custom.hidden", "value": true }] },
-              { "matcher": { "id": "byName", "options": "__name__" }, "properties": [{ "id": "custom.hidden", "value": true }] },
-              { "matcher": { "id": "byName", "options": "instance" }, "properties": [{ "id": "custom.hidden", "value": true }] },
-              { "matcher": { "id": "byName", "options": "job" }, "properties": [{ "id": "custom.hidden", "value": true }] }
+              { "matcher": { "id": "byName", "options": "node" }, "properties": [{ "id": "displayName", "value": "Node" }, { "id": "custom.width", "value": 300 }] },
+              { "matcher": { "id": "byName", "options": "Value" }, "properties": [{ "id": "displayName", "value": "Status" }, { "id": "mappings", "value": [{ "options": { "0": { "text": "No NRI", "color": "red" }, "1": { "text": "NRI OK", "color": "green" } }, "type": "value" }] }, { "id": "custom.cellOptions", "value": { "type": "color-text" } }] }
             ]
           },
           "options": { "showHeader": true, "footer": { "show": false } },
-          "transformations": [{ "id": "reduce", "options": { "reducers": ["lastNotNull"] } }],
-          "targets": [{ "expr": "cainjekt_nri_available", "legendFormat": "", "format": "table", "instant": true }]
+          "transformations": [
+            { "id": "organize", "options": { "excludeByName": { "Time": true, "__name__": true, "container": true, "endpoint": true, "instance": true, "job": true, "namespace": true, "pod": true, "service": true }, "indexByName": {}, "renameByName": {} } }
+          ],
+          "targets": [{ "expr": "cainjekt_nri_available", "format": "table", "instant": true }]
         },
         {
           "title": "Pod Health",
-          "description": "cainjekt pod restarts. High values indicate crashlooping pods (possibly nodes without NRI).",
+          "description": "cainjekt pod restarts. High values indicate crashlooping pods.",
           "type": "table",
           "gridPos": { "h": 6, "w": 12, "x": 12, "y": 11 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
           "fieldConfig": {
-            "defaults": {
-              "custom": { "align": "center" }
-            },
+            "defaults": { "custom": { "align": "center" } },
             "overrides": [
-              { "matcher": { "id": "byName", "options": "pod" }, "properties": [{ "id": "displayName", "value": "Pod" }] },
-              { "matcher": { "id": "byName", "options": "Value" }, "properties": [{ "id": "displayName", "value": "Restarts" }, { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 3 }, { "color": "red", "value": 10 }] } }, { "id": "custom.cellOptions", "value": { "type": "color-text" } }] },
-              { "matcher": { "id": "byName", "options": "Time" }, "properties": [{ "id": "custom.hidden", "value": true }] },
-              { "matcher": { "id": "byName", "options": "__name__" }, "properties": [{ "id": "custom.hidden", "value": true }] },
-              { "matcher": { "id": "byName", "options": "namespace" }, "properties": [{ "id": "custom.hidden", "value": true }] },
-              { "matcher": { "id": "byName", "options": "container" }, "properties": [{ "id": "custom.hidden", "value": true }] },
-              { "matcher": { "id": "byName", "options": "instance" }, "properties": [{ "id": "custom.hidden", "value": true }] },
-              { "matcher": { "id": "byName", "options": "job" }, "properties": [{ "id": "custom.hidden", "value": true }] },
-              { "matcher": { "id": "byName", "options": "uid" }, "properties": [{ "id": "custom.hidden", "value": true }] }
+              { "matcher": { "id": "byName", "options": "pod" }, "properties": [{ "id": "displayName", "value": "Pod" }, { "id": "custom.width", "value": 300 }] },
+              { "matcher": { "id": "byName", "options": "Value" }, "properties": [{ "id": "displayName", "value": "Restarts" }, { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 3 }, { "color": "red", "value": 10 }] } }, { "id": "custom.cellOptions", "value": { "type": "color-text" } }] }
             ]
           },
           "options": { "showHeader": true, "sortBy": [{ "displayName": "Restarts", "desc": true }], "footer": { "show": false } },
-          "targets": [{ "expr": "kube_pod_container_status_restarts_total{container=\"cainjekt\"}", "legendFormat": "", "format": "table", "instant": true }]
+          "transformations": [
+            { "id": "organize", "options": { "excludeByName": { "Time": true, "__name__": true, "container": true, "endpoint": true, "instance": true, "job": true, "namespace": true, "service": true, "uid": true }, "indexByName": {}, "renameByName": {} } }
+          ],
+          "targets": [{ "expr": "kube_pod_container_status_restarts_total{container=\"cainjekt\"}", "format": "table", "instant": true }]
         },
         {
           "title": "CA Bundle",

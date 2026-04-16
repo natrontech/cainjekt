@@ -76,8 +76,8 @@ jobs:
           load: true
           push: false
           tags: cainjekt:ci-test
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=cainjekt
+          cache-to: type=gha,mode=max,scope=cainjekt
 
       - name: Build installer Docker image
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
@@ -87,7 +87,10 @@ jobs:
           load: true
           push: false
           tags: cainjekt-installer:ci-test
-          cache-from: type=gha
+          cache-from: |
+            type=gha,scope=cainjekt-installer
+            type=gha,scope=cainjekt
+          cache-to: type=gha,mode=max,scope=cainjekt-installer
 
       - name: Test Docker images
         run: |

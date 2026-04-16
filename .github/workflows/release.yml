@@ -56,8 +56,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=cainjekt
+          cache-to: type=gha,mode=max,scope=cainjekt
           platforms: linux/amd64,linux/arm64
 
       - name: Generate artifact attestation
@@ -89,7 +89,9 @@ jobs:
           push: true
           tags: ${{ steps.meta-installer.outputs.tags }}
           labels: ${{ steps.meta-installer.outputs.labels }}
-          cache-from: type=gha
+          cache-from: |
+            type=gha,scope=cainjekt-installer
+            type=gha,scope=cainjekt
           platforms: linux/amd64,linux/arm64
 
       - name: Generate installer artifact attestation
