@@ -224,7 +224,7 @@ func ensureHelmRelease(t *testing.T, clusterName string) {
 	})
 }
 
-// waitForPodPhase waits until the named pod reaches the given phase.
+// waitForPodPhase waits until the named pod reaches the given phase AND all containers are ready.
 func waitForPodPhase(t *testing.T, timeout time.Duration, namespace, name, phase string) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -237,7 +237,13 @@ func waitForPodPhase(t *testing.T, timeout time.Duration, namespace, name, phase
 			t.Fatalf("timeout waiting for pod %s to reach phase %s", name, phase)
 		case <-time.After(3 * time.Second):
 			got, _ := runCmdWithInput(10*time.Second, "", "kubectl", "get", "pod", name, "-n", namespace, "-o", "jsonpath={.status.phase}")
-			if strings.TrimSpace(got) == phase {
+			if strings.TrimSpace(got) != phase {
+				continue
+			}
+			// Phase matches — also check container readiness.
+			ready, _ := runCmdWithInput(10*time.Second, "", "kubectl", "get", "pod", name, "-n", namespace,
+				"-o", "jsonpath={.status.containerStatuses[0].ready}")
+			if strings.TrimSpace(ready) == "true" {
 				return
 			}
 		}

@@ -18,7 +18,7 @@ type nsLabelCache struct {
 	mu      sync.RWMutex
 	entries map[string]nsEntry
 	ttl     time.Duration
-	client  *http.Client
+	client  *http.Client // nil if K8s API is not available
 	token   string
 	apiURL  string
 }
@@ -29,23 +29,36 @@ type nsEntry struct {
 }
 
 func newNSLabelCache() *nsLabelCache {
-	token, _ := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/token")
-	return &nsLabelCache{
+	cache := &nsLabelCache{
 		entries: map[string]nsEntry{},
 		ttl:     1 * time.Minute,
-		client: &http.Client{
-			Timeout: 5 * time.Second,
-			Transport: &http.Transport{
-				TLSClientConfig: tlsConfigFromServiceAccount(),
-			},
-		},
-		token:  strings.TrimSpace(string(token)),
-		apiURL: "https://kubernetes.default.svc/api/v1/namespaces/",
+		apiURL:  "https://kubernetes.default.svc/api/v1/namespaces/",
 	}
+
+	token, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/token")
+	if err != nil {
+		return cache // client stays nil — namespace lookups disabled
+	}
+	cache.token = strings.TrimSpace(string(token))
+
+	tlsCfg, err := tlsConfigFromServiceAccount()
+	if err != nil {
+		return cache // client stays nil — namespace lookups disabled
+	}
+
+	cache.client = &http.Client{
+		Timeout:   5 * time.Second,
+		Transport: &http.Transport{TLSClientConfig: tlsCfg},
+	}
+	return cache
 }
 
 // getLabel returns the value of a label on the given namespace.
 func (c *nsLabelCache) getLabel(namespace, key string) (string, bool) {
+	if c.client == nil {
+		return "", false
+	}
+
 	labels, ok := c.getCachedLabels(namespace)
 	if ok {
 		v, found := labels[key]
@@ -76,6 +89,9 @@ func (c *nsLabelCache) getCachedLabels(namespace string) (map[string]string, boo
 }
 
 func (c *nsLabelCache) fetchLabels(namespace string) (map[string]string, error) {
+	if c.client == nil {
+		return nil, fmt.Errorf("K8s API client not available")
+	}
 	if c.token == "" {
 		return nil, fmt.Errorf("no service account token")
 	}
@@ -113,12 +129,12 @@ func (c *nsLabelCache) fetchLabels(namespace string) (map[string]string, error) 
 	return ns.Metadata.Labels, nil
 }
 
-func tlsConfigFromServiceAccount() *tls.Config {
+func tlsConfigFromServiceAccount() (*tls.Config, error) {
 	caCert, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
 	if err != nil {
-		return &tls.Config{InsecureSkipVerify: true} //nolint:gosec // fallback when SA not mounted
+		return nil, fmt.Errorf("failed to read SA CA cert: %w", err)
 	}
 	pool := x509.NewCertPool()
 	pool.AppendCertsFromPEM(caCert)
-	return &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}
+	return &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}, nil
 }
