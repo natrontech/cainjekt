@@ -145,6 +145,10 @@ The DaemonSet runs with `privileged: true`. This is required because:
 
 `hostNetwork` and `hostPID` are **not required** — the plugin communicates via Unix socket (hostPath volume), not the network. They are disabled by default in the Helm chart but can be enabled if needed.
 
+### Nodes Without NRI
+
+Some managed Kubernetes nodes don't have NRI enabled in their containerd configuration — for example, AKS GPU nodes use a custom containerd config for the NVIDIA runtime that may not include the NRI plugin. When the NRI socket (`/var/run/nri/nri.sock`) is not available, the plugin logs a warning and enters idle mode: the health endpoint stays running (so the DaemonSet doesn't crash-loop) but no CA injection happens on that node.
+
 ### Safety Guarantees
 
 - **Opt-in only**: Containers are never modified unless the pod has `cainjekt.natron.io/enabled: "true"`

@@ -60,13 +60,7 @@ func Run(log *slog.Logger, args []string) error {
 		opts = append(opts, stub.WithSocketPath(socketPath))
 	}
 
-	st, err := stub.New(p, opts...)
-	if err != nil {
-		return fmt.Errorf("failed to create plugin stub: %w", err)
-	}
-	p.stub = st
-
-	// Start HTTP server for health/readiness/metrics.
+	// Start HTTP server for health/readiness/metrics (always, even if NRI is unavailable).
 	srv := newHTTPServer(httpAddr, metrics)
 	go func() {
 		log.Info("starting HTTP server", "addr", httpAddr)
@@ -75,14 +69,29 @@ func Run(log *slog.Logger, args []string) error {
 		}
 	}()
 
+	// Handle graceful shutdown.
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
+
+	st, err := stub.New(p, opts...)
+	if err != nil {
+		// NRI not available on this node (e.g. AKS GPU nodes with custom containerd config).
+		// Stay alive with health endpoint running so the DaemonSet doesn't crash-loop.
+		log.Warn("NRI not available on this node, running in idle mode",
+			"error", err,
+			"hint", "containerd may not have NRI enabled (e.g. AKS GPU nodes)",
+		)
+		<-ctx.Done()
+		log.Info("shutdown signal received")
+		_ = srv.Shutdown(context.Background())
+		return nil
+	}
+	p.stub = st
+
 	// Start orphan cleanup goroutine.
 	stopCleanup := make(chan struct{})
 	cleaner := newOrphanCleaner(dynamicCARoot(), &p.tracked, metrics, log)
 	go cleaner.run(stopCleanup)
-
-	// Handle graceful shutdown.
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
-	defer stop()
 
 	errCh := make(chan error, 1)
 	go func() {
