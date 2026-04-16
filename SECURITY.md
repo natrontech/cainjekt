@@ -10,16 +10,18 @@ We only support the latest release. Please upgrade before reporting issues.
 
 ## Reporting a Vulnerability
 
-**Please do not open a public GitHub issue for security vulnerabilities.**
-
-Instead, report vulnerabilities by emailing **security@natron.io** with:
+To report a security vulnerability, please [open a GitHub issue](https://github.com/natrontech/cainjekt/issues/new) with the label `security`. Include:
 
 - A description of the vulnerability
 - Steps to reproduce
 - Potential impact
 - Suggested fix (if any)
 
-We will acknowledge your report within **3 business days** and aim to provide a fix or mitigation plan within **14 days**, depending on severity.
+> **Note:** This is an open-source project maintained on a best-effort basis. There is no guaranteed response time or acknowledgment for security reports. We will address issues as capacity allows.
+
+## Direct Support
+
+If you are a direct customer of [**Natron Tech AG**](https://natron.io), you can submit service requests through your existing support channels for guaranteed response times.
 
 ## Scope
 
@@ -32,10 +34,8 @@ cainjekt runs as a privileged DaemonSet with access to the container runtime. Se
 
 ## Disclosure
 
-We follow coordinated disclosure. Once a fix is released, we will:
+Once a fix is released, we will:
 
 1. Publish a GitHub Security Advisory
 2. Credit the reporter (unless they prefer anonymity)
 3. Tag a new release with the fix
-
-Thank you for helping keep cainjekt and its users safe.
