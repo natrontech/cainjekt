@@ -30,9 +30,25 @@ data:
           "collapsed": false
         },
         {
+          "title": "NRI Status",
+          "description": "Nodes where NRI is available (1) vs unavailable (0). Nodes without NRI cannot inject CAs.",
+          "type": "stat",
+          "gridPos": { "h": 4, "w": 3, "x": 0, "y": 1 },
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "fieldConfig": {
+            "defaults": {
+              "color": { "mode": "thresholds" },
+              "thresholds": { "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] },
+              "mappings": [{ "options": { "0": { "text": "No NRI" }, "1": { "text": "NRI OK" } }, "type": "value" }]
+            }
+          },
+          "options": { "graphMode": "none", "textMode": "value_and_name" },
+          "targets": [{ "expr": "cainjekt_nri_available", "legendFormat": "{{ `{{instance}}` }}" }]
+        },
+        {
           "title": "Injections / min",
           "type": "timeseries",
-          "gridPos": { "h": 8, "w": 10, "x": 0, "y": 1 },
+          "gridPos": { "h": 8, "w": 8, "x": 3, "y": 1 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
           "fieldConfig": {
             "defaults": {

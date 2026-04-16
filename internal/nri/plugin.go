@@ -77,15 +77,20 @@ func Run(log *slog.Logger, args []string) error {
 	if err != nil {
 		// NRI not available on this node (e.g. AKS GPU nodes with custom containerd config).
 		// Stay alive with health endpoint running so the DaemonSet doesn't crash-loop.
+		metrics.NRIAvailable.Set(0)
 		log.Warn("NRI not available on this node, running in idle mode",
 			"error", err,
 			"hint", "containerd may not have NRI enabled (e.g. AKS GPU nodes)",
 		)
+		emitNodeEvent(log, "NRIUnavailable",
+			fmt.Sprintf("cainjekt: NRI socket not found, CA injection disabled on this node (%v)", err),
+			"Warning")
 		<-ctx.Done()
 		log.Info("shutdown signal received")
 		_ = srv.Shutdown(context.Background())
 		return nil
 	}
+	metrics.NRIAvailable.Set(1)
 	p.stub = st
 
 	// Start orphan cleanup goroutine.

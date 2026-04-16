@@ -40,6 +40,15 @@ spec:
           annotations:
             summary: "cainjekt is cleaning up many orphaned CA directories"
             description: "{{ `{{ $value }}` }} orphaned CA directories cleaned in the last hour on {{ `{{ $labels.instance }}` }}"
+        - alert: CainjektNRIUnavailable
+          expr: |
+            cainjekt_nri_available == 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "cainjekt NRI unavailable on node"
+            description: "NRI socket not found on {{ `{{ $labels.instance }}` }}. CA injection is disabled on this node."
         {{- with .Values.prometheusRule.additionalRules }}
         {{- toYaml . | nindent 8 }}
         {{- end }}

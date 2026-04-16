@@ -20,6 +20,7 @@ type Metrics struct {
 	CABundleHash         *prometheus.CounterVec
 	CABundleLastModified prometheus.Gauge
 	CABundleCertCount    prometheus.Gauge
+	NRIAvailable         prometheus.Gauge
 }
 
 func newMetrics() *Metrics {
@@ -77,6 +78,10 @@ func newMetrics() *Metrics {
 			Name: "cainjekt_ca_bundle_certificates_count",
 			Help: "Number of PEM certificates in the CA bundle.",
 		}),
+		NRIAvailable: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "cainjekt_nri_available",
+			Help: "Whether NRI is available on this node (1=yes, 0=no).",
+		}),
 	}
 
 	reg.MustRegister(
@@ -92,6 +97,7 @@ func newMetrics() *Metrics {
 		m.CABundleHash,
 		m.CABundleLastModified,
 		m.CABundleCertCount,
+		m.NRIAvailable,
 	)
 
 	return m
