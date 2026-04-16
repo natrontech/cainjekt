@@ -75,12 +75,12 @@ func Run(log *slog.Logger, args []string) error {
 
 	st, err := stub.New(p, opts...)
 	if err != nil {
-		metrics.NRIAvailable.Set(0)
+		metrics.NRIAvailable.WithLabelValues(nodeName()).Set(0)
 		return fmt.Errorf("NRI not available on this node (containerd may not have NRI enabled, "+
 			"e.g. AKS GPU nodes). Either enable NRI in containerd config or exclude this node "+
 			"from the cainjekt DaemonSet via nodeSelector/affinity: %w", err)
 	}
-	metrics.NRIAvailable.Set(1)
+	metrics.NRIAvailable.WithLabelValues(nodeName()).Set(1)
 	p.stub = st
 
 	// Start orphan cleanup goroutine.
