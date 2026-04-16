@@ -82,7 +82,7 @@ data:
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
           "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }] } } },
           "options": { "graphMode": "none" },
-          "targets": [{ "expr": "sum(increase(cainjekt_injections_total[1h]))", "legendFormat": "last 1h" }]
+          "targets": [{ "expr": "round(sum(increase(cainjekt_injections_total[1h])))", "legendFormat": "last 1h" }]
         },
         {
           "title": "Errors",
@@ -91,7 +91,7 @@ data:
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
           "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } } },
           "options": { "graphMode": "none" },
-          "targets": [{ "expr": "sum(increase(cainjekt_injections_errors_total[1h]))" }]
+          "targets": [{ "expr": "round(sum(increase(cainjekt_injections_errors_total[1h])))" }]
         },
         {
           "title": "Skipped",
@@ -100,7 +100,7 @@ data:
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
           "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "text", "value": null }] } } },
           "options": { "graphMode": "none" },
-          "targets": [{ "expr": "sum(increase(cainjekt_skipped_total[1h]))" }]
+          "targets": [{ "expr": "round(sum(increase(cainjekt_skipped_total[1h])))" }]
         },
         {
           "title": "Orphans",
@@ -109,7 +109,7 @@ data:
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
           "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "text", "value": null }, { "color": "orange", "value": 10 }] } } },
           "options": { "graphMode": "none" },
-          "targets": [{ "expr": "sum(increase(cainjekt_orphans_cleaned_total[1h]))" }]
+          "targets": [{ "expr": "round(sum(increase(cainjekt_orphans_cleaned_total[1h])))" }]
         },
         {
           "title": "NRI Node Status",
