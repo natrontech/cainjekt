@@ -176,8 +176,23 @@ spec:
 	runCmd(t, 30*time.Second, "kubectl", "apply", "-f", tmpFile)
 	waitForPodPhase(t, 2*time.Minute, ns, "test-status", "Running")
 
-	output := runCmd(t, 30*time.Second, "kubectl", "exec", "-n", ns, "test-status", "--",
-		"cat", "/etc/cainjekt/status.json")
+	// Retry reading the status file — the hook may still be writing it.
+	var output string
+	for i := 0; i < 10; i++ {
+		out, err := runCmdWithInput(10*time.Second, "", "kubectl", "exec", "-n", ns, "test-status", "--",
+			"cat", "/etc/cainjekt/status.json")
+		if err == nil && strings.Contains(out, `"injected"`) {
+			output = out
+			break
+		}
+		t.Logf("Waiting for status.json (attempt %d)...", i+1)
+		time.Sleep(3 * time.Second)
+	}
+	if output == "" {
+		// Final attempt with fatal on failure.
+		output = runCmd(t, 30*time.Second, "kubectl", "exec", "-n", ns, "test-status", "--",
+			"cat", "/etc/cainjekt/status.json")
+	}
 	t.Logf("Status file:\n%s", output)
 
 	if !strings.Contains(output, `"injected"`) {
