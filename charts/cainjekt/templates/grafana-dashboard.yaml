@@ -114,18 +114,50 @@ data:
         {
           "title": "NRI Node Status",
           "description": "Shows which nodes have NRI available for CA injection.",
-          "type": "stat",
-          "gridPos": { "h": 5, "w": 24, "x": 0, "y": 11 },
+          "type": "table",
+          "gridPos": { "h": 6, "w": 12, "x": 0, "y": 11 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
           "fieldConfig": {
             "defaults": {
-              "color": { "mode": "thresholds" },
-              "thresholds": { "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] },
-              "mappings": [{ "options": { "0": { "text": "No NRI" }, "1": { "text": "NRI OK" } }, "type": "value" }]
-            }
+              "custom": { "align": "center" }
+            },
+            "overrides": [
+              { "matcher": { "id": "byName", "options": "node" }, "properties": [{ "id": "displayName", "value": "Node" }] },
+              { "matcher": { "id": "byName", "options": "Value" }, "properties": [{ "id": "displayName", "value": "Status" }, { "id": "mappings", "value": [{ "options": { "0": { "text": "No NRI", "color": "red" }, "1": { "text": "NRI OK", "color": "green" } }, "type": "value" }] }, { "id": "custom.cellOptions", "value": { "type": "color-text" } }] },
+              { "matcher": { "id": "byName", "options": "Time" }, "properties": [{ "id": "custom.hidden", "value": true }] },
+              { "matcher": { "id": "byName", "options": "__name__" }, "properties": [{ "id": "custom.hidden", "value": true }] },
+              { "matcher": { "id": "byName", "options": "instance" }, "properties": [{ "id": "custom.hidden", "value": true }] },
+              { "matcher": { "id": "byName", "options": "job" }, "properties": [{ "id": "custom.hidden", "value": true }] }
+            ]
           },
-          "options": { "graphMode": "none", "textMode": "value_and_name" },
-          "targets": [{ "expr": "cainjekt_nri_available", "legendFormat": "{{ `{{node}}` }}" }]
+          "options": { "showHeader": true, "footer": { "show": false } },
+          "transformations": [{ "id": "reduce", "options": { "reducers": ["lastNotNull"] } }],
+          "targets": [{ "expr": "cainjekt_nri_available", "legendFormat": "", "format": "table", "instant": true }]
+        },
+        {
+          "title": "Pod Health",
+          "description": "cainjekt pod restarts. High values indicate crashlooping pods (possibly nodes without NRI).",
+          "type": "table",
+          "gridPos": { "h": 6, "w": 12, "x": 12, "y": 11 },
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "fieldConfig": {
+            "defaults": {
+              "custom": { "align": "center" }
+            },
+            "overrides": [
+              { "matcher": { "id": "byName", "options": "pod" }, "properties": [{ "id": "displayName", "value": "Pod" }] },
+              { "matcher": { "id": "byName", "options": "Value" }, "properties": [{ "id": "displayName", "value": "Restarts" }, { "id": "thresholds", "value": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 3 }, { "color": "red", "value": 10 }] } }, { "id": "custom.cellOptions", "value": { "type": "color-text" } }] },
+              { "matcher": { "id": "byName", "options": "Time" }, "properties": [{ "id": "custom.hidden", "value": true }] },
+              { "matcher": { "id": "byName", "options": "__name__" }, "properties": [{ "id": "custom.hidden", "value": true }] },
+              { "matcher": { "id": "byName", "options": "namespace" }, "properties": [{ "id": "custom.hidden", "value": true }] },
+              { "matcher": { "id": "byName", "options": "container" }, "properties": [{ "id": "custom.hidden", "value": true }] },
+              { "matcher": { "id": "byName", "options": "instance" }, "properties": [{ "id": "custom.hidden", "value": true }] },
+              { "matcher": { "id": "byName", "options": "job" }, "properties": [{ "id": "custom.hidden", "value": true }] },
+              { "matcher": { "id": "byName", "options": "uid" }, "properties": [{ "id": "custom.hidden", "value": true }] }
+            ]
+          },
+          "options": { "showHeader": true, "sortBy": [{ "displayName": "Restarts", "desc": true }], "footer": { "show": false } },
+          "targets": [{ "expr": "kube_pod_container_status_restarts_total{container=\"cainjekt\"}", "legendFormat": "", "format": "table", "instant": true }]
         },
         {
           "title": "CA Bundle",
