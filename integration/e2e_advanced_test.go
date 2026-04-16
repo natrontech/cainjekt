@@ -176,23 +176,16 @@ spec:
 	runCmd(t, 30*time.Second, "kubectl", "apply", "-f", tmpFile)
 	waitForPodPhase(t, 2*time.Minute, ns, "test-status", "Running")
 
-	// Retry reading the status file — the hook may still be writing it.
-	var output string
-	for i := 0; i < 10; i++ {
-		out, err := runCmdWithInput(10*time.Second, "", "kubectl", "exec", "-n", ns, "test-status", "--",
-			"cat", "/etc/cainjekt/status.json")
-		if err == nil && strings.Contains(out, `"injected"`) {
-			output = out
-			break
-		}
-		t.Logf("Waiting for status.json (attempt %d)...", i+1)
-		time.Sleep(3 * time.Second)
+	// First verify CA injection worked (proves the hook ran).
+	caOutput := runCmd(t, 30*time.Second, "kubectl", "exec", "-n", ns, "test-status", "--",
+		"ls", "/usr/local/share/ca-certificates/")
+	if !strings.Contains(caOutput, "cainjekt.crt") {
+		t.Fatal("CA not injected — hook did not run, cannot verify status file")
 	}
-	if output == "" {
-		// Final attempt with fatal on failure.
-		output = runCmd(t, 30*time.Second, "kubectl", "exec", "-n", ns, "test-status", "--",
-			"cat", "/etc/cainjekt/status.json")
-	}
+
+	// Hook ran successfully, status file should exist.
+	output := runCmd(t, 30*time.Second, "kubectl", "exec", "-n", ns, "test-status", "--",
+		"cat", "/etc/cainjekt/status.json")
 	t.Logf("Status file:\n%s", output)
 
 	if !strings.Contains(output, `"injected"`) {
@@ -209,10 +202,19 @@ spec:
 func ensureHelmRelease(t *testing.T, clusterName string) {
 	t.Helper()
 
-	// Check if already installed.
+	// Check if already installed and DaemonSet is ready.
 	_, err := runCmdWithInput(10*time.Second, "", "helm", "status", "cainjekt-e2e", "-n", "kube-system")
 	if err == nil {
-		return // Already installed.
+		// Wait for DaemonSet to be ready (may have just been installed by another test).
+		for i := 0; i < 20; i++ {
+			ready, _ := runCmdWithInput(10*time.Second, "", "kubectl", "get", "daemonset", "cainjekt-e2e",
+				"-n", "kube-system", "-o", "jsonpath={.status.numberReady}")
+			if strings.TrimSpace(ready) != "" && strings.TrimSpace(ready) != "0" {
+				return
+			}
+			time.Sleep(3 * time.Second)
+		}
+		return
 	}
 
 	// Build and load images.
