@@ -30,25 +30,9 @@ data:
           "collapsed": false
         },
         {
-          "title": "NRI Status",
-          "description": "Nodes where NRI is available (1) vs unavailable (0). Nodes without NRI cannot inject CAs.",
-          "type": "stat",
-          "gridPos": { "h": 4, "w": 3, "x": 0, "y": 1 },
-          "datasource": { "type": "prometheus", "uid": "${datasource}" },
-          "fieldConfig": {
-            "defaults": {
-              "color": { "mode": "thresholds" },
-              "thresholds": { "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] },
-              "mappings": [{ "options": { "0": { "text": "No NRI" }, "1": { "text": "NRI OK" } }, "type": "value" }]
-            }
-          },
-          "options": { "graphMode": "none", "textMode": "value_and_name" },
-          "targets": [{ "expr": "cainjekt_nri_available", "legendFormat": "{{ `{{instance}}` }}" }]
-        },
-        {
-          "title": "Injections / min",
+          "title": "Injection Rate",
           "type": "timeseries",
-          "gridPos": { "h": 8, "w": 8, "x": 3, "y": 1 },
+          "gridPos": { "h": 10, "w": 10, "x": 0, "y": 1 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
           "fieldConfig": {
             "defaults": {
@@ -56,19 +40,20 @@ data:
               "custom": { "fillOpacity": 20, "lineWidth": 2, "showPoints": "never" }
             },
             "overrides": [
-              { "matcher": { "id": "byName", "options": "errors" }, "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }] }
+              { "matcher": { "id": "byName", "options": "errors" }, "properties": [{ "id": "color", "value": { "fixedColor": "red", "mode": "fixed" } }] },
+              { "matcher": { "id": "byName", "options": "skipped" }, "properties": [{ "id": "color", "value": { "fixedColor": "yellow", "mode": "fixed" } }] }
             ]
           },
           "targets": [
-            { "expr": "sum(rate(cainjekt_injections_total[5m]))", "legendFormat": "total" },
-            { "expr": "sum(rate(cainjekt_injections_errors_total[5m]))", "legendFormat": "errors" },
-            { "expr": "sum(rate(cainjekt_skipped_total[5m]))", "legendFormat": "skipped" }
+            { "expr": "sum(increase(cainjekt_injections_total[5m]))", "legendFormat": "injected" },
+            { "expr": "sum(increase(cainjekt_injections_errors_total[5m]))", "legendFormat": "errors" },
+            { "expr": "sum(increase(cainjekt_skipped_total[5m]))", "legendFormat": "skipped" }
           ]
         },
         {
           "title": "Success Rate",
           "type": "gauge",
-          "gridPos": { "h": 8, "w": 3, "x": 10, "y": 1 },
+          "gridPos": { "h": 10, "w": 3, "x": 10, "y": 1 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
           "fieldConfig": {
             "defaults": {
@@ -91,13 +76,13 @@ data:
           "targets": [{ "expr": "sum(cainjekt_active_containers)", "legendFormat": "active" }]
         },
         {
-          "title": "Injections",
+          "title": "Injected",
           "type": "stat",
           "gridPos": { "h": 4, "w": 2, "x": 15, "y": 1 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
           "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }] } } },
           "options": { "graphMode": "none" },
-          "targets": [{ "expr": "sum(cainjekt_injections_total)" }]
+          "targets": [{ "expr": "sum(increase(cainjekt_injections_total[1h]))", "legendFormat": "last 1h" }]
         },
         {
           "title": "Errors",
@@ -106,7 +91,7 @@ data:
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
           "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } } },
           "options": { "graphMode": "none" },
-          "targets": [{ "expr": "sum(cainjekt_injections_errors_total)" }]
+          "targets": [{ "expr": "sum(increase(cainjekt_injections_errors_total[1h]))" }]
         },
         {
           "title": "Skipped",
@@ -115,7 +100,7 @@ data:
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
           "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "text", "value": null }] } } },
           "options": { "graphMode": "none" },
-          "targets": [{ "expr": "sum(cainjekt_skipped_total)" }]
+          "targets": [{ "expr": "sum(increase(cainjekt_skipped_total[1h]))" }]
         },
         {
           "title": "Orphans",
@@ -124,34 +109,34 @@ data:
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
           "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "text", "value": null }, { "color": "orange", "value": 10 }] } } },
           "options": { "graphMode": "none" },
-          "targets": [{ "expr": "sum(cainjekt_orphans_cleaned_total)" }]
+          "targets": [{ "expr": "sum(increase(cainjekt_orphans_cleaned_total[1h]))" }]
         },
         {
-          "title": "Injections Over Time",
-          "type": "timeseries",
-          "gridPos": { "h": 4, "w": 11, "x": 13, "y": 5 },
+          "title": "NRI Node Status",
+          "description": "Shows which nodes have NRI available for CA injection.",
+          "type": "stat",
+          "gridPos": { "h": 5, "w": 24, "x": 0, "y": 11 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
           "fieldConfig": {
             "defaults": {
-              "color": { "mode": "palette-classic" },
-              "custom": { "fillOpacity": 10, "lineWidth": 1, "showPoints": "never" }
+              "color": { "mode": "thresholds" },
+              "thresholds": { "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] },
+              "mappings": [{ "options": { "0": { "text": "No NRI" }, "1": { "text": "NRI OK" } }, "type": "value" }]
             }
           },
-          "targets": [
-            { "expr": "sum(cainjekt_injections_total)", "legendFormat": "injections" },
-            { "expr": "sum(cainjekt_skipped_total)", "legendFormat": "skipped" }
-          ]
+          "options": { "graphMode": "none", "textMode": "value_and_name" },
+          "targets": [{ "expr": "cainjekt_nri_available", "legendFormat": "{{ `{{node}}` }}" }]
         },
         {
           "title": "CA Bundle",
           "type": "row",
-          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 9 },
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 },
           "collapsed": false
         },
         {
           "title": "CA Bundle Age",
           "type": "stat",
-          "gridPos": { "h": 6, "w": 4, "x": 0, "y": 10 },
+          "gridPos": { "h": 6, "w": 4, "x": 0, "y": 17 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
           "fieldConfig": {
             "defaults": {
@@ -164,46 +149,46 @@ data:
           "targets": [{ "expr": "time() - max(cainjekt_ca_bundle_last_modified_timestamp)" }]
         },
         {
-          "title": "Certificates in Bundle",
+          "title": "Certificates",
           "type": "stat",
-          "gridPos": { "h": 6, "w": 3, "x": 4, "y": 10 },
+          "gridPos": { "h": 6, "w": 3, "x": 4, "y": 17 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
           "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "blue", "value": null }] } } },
           "options": { "graphMode": "none" },
           "targets": [{ "expr": "max(cainjekt_ca_bundle_certificates_count)" }]
         },
         {
-          "title": "Injections by CA Hash",
+          "title": "Injections by CA Hash (last 1h)",
           "type": "timeseries",
-          "gridPos": { "h": 6, "w": 17, "x": 7, "y": 10 },
+          "gridPos": { "h": 6, "w": 17, "x": 7, "y": 17 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
           "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "fillOpacity": 20, "lineWidth": 2, "showPoints": "never" } } },
           "targets": [
-            { "expr": "sum by (hash) (rate(cainjekt_ca_bundle_injections_total[5m]))", "legendFormat": "{{ `{{hash}}` }}" }
+            { "expr": "sum by (hash) (increase(cainjekt_ca_bundle_injections_total[1h]))", "legendFormat": "{{ `{{hash}}` }}" }
           ]
         },
         {
           "title": "Operations",
           "type": "row",
-          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 16 },
+          "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
           "collapsed": false
         },
         {
-          "title": "Cleanups / min",
+          "title": "Cleanups (last 1h)",
           "type": "timeseries",
-          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 17 },
+          "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
           "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "fillOpacity": 20, "lineWidth": 2, "showPoints": "never" } } },
           "targets": [
-            { "expr": "sum(rate(cainjekt_cleanups_total[5m]))", "legendFormat": "cleanups" },
-            { "expr": "sum(rate(cainjekt_orphans_cleaned_total[5m]))", "legendFormat": "orphans" },
-            { "expr": "sum(rate(cainjekt_cleanups_errors_total[5m]))", "legendFormat": "errors" }
+            { "expr": "sum(increase(cainjekt_cleanups_total[1h]))", "legendFormat": "cleanups" },
+            { "expr": "sum(increase(cainjekt_orphans_cleaned_total[1h]))", "legendFormat": "orphans" },
+            { "expr": "sum(increase(cainjekt_cleanups_errors_total[1h]))", "legendFormat": "errors" }
           ]
         },
         {
           "title": "Go Runtime",
           "type": "timeseries",
-          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 17 },
+          "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },
           "fieldConfig": {
             "defaults": {
@@ -223,11 +208,9 @@ data:
       "templating": {
         "list": [
           {
-            "current": { "selected": false, "text": "Prometheus", "value": "prometheus" },
-            "hide": 0,
+            "current": { "text": "Prometheus", "value": "prometheus" },
             "includeAll": false,
             "label": "Datasource",
-            "multi": false,
             "name": "datasource",
             "query": "prometheus",
             "refresh": 1,
@@ -236,6 +219,7 @@ data:
         ]
       },
       "time": { "from": "now-1h", "to": "now" },
+      "refresh": "30s",
       "title": "cainjekt",
       "uid": "cainjekt-overview"
     }

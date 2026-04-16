@@ -1,6 +1,9 @@
 package nri
 
 import (
+	"os"
+	"strings"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 )
@@ -15,12 +18,10 @@ type Metrics struct {
 	CleanupsErrors       prometheus.Counter
 	OrphansCleaned       prometheus.Counter
 	ActiveContainers     prometheus.Gauge
-	ProcessorDetected    *prometheus.CounterVec
-	ProcessorApplied     *prometheus.CounterVec
 	CABundleHash         *prometheus.CounterVec
 	CABundleLastModified prometheus.Gauge
 	CABundleCertCount    prometheus.Gauge
-	NRIAvailable         prometheus.Gauge
+	NRIAvailable         *prometheus.GaugeVec
 }
 
 func newMetrics() *Metrics {
@@ -58,17 +59,9 @@ func newMetrics() *Metrics {
 			Name: "cainjekt_active_containers",
 			Help: "Currently tracked containers with CA injection.",
 		}),
-		ProcessorDetected: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "cainjekt_processor_detected_total",
-			Help: "Times a processor was detected as applicable.",
-		}, []string{"processor"}),
-		ProcessorApplied: prometheus.NewCounterVec(prometheus.CounterOpts{
-			Name: "cainjekt_processor_applied_total",
-			Help: "Times a processor was successfully applied.",
-		}, []string{"processor"}),
 		CABundleHash: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "cainjekt_ca_bundle_injections_total",
-			Help: "Injections per CA bundle hash (first 12 chars of SHA-256). Helps detect stale CAs after rotation.",
+			Help: "Injections per CA bundle hash (first 12 chars of SHA-256).",
 		}, []string{"hash"}),
 		CABundleLastModified: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "cainjekt_ca_bundle_last_modified_timestamp",
@@ -78,10 +71,10 @@ func newMetrics() *Metrics {
 			Name: "cainjekt_ca_bundle_certificates_count",
 			Help: "Number of PEM certificates in the CA bundle.",
 		}),
-		NRIAvailable: prometheus.NewGauge(prometheus.GaugeOpts{
+		NRIAvailable: prometheus.NewGaugeVec(prometheus.GaugeOpts{
 			Name: "cainjekt_nri_available",
 			Help: "Whether NRI is available on this node (1=yes, 0=no).",
-		}),
+		}, []string{"node"}),
 	}
 
 	reg.MustRegister(
@@ -92,8 +85,6 @@ func newMetrics() *Metrics {
 		m.CleanupsErrors,
 		m.OrphansCleaned,
 		m.ActiveContainers,
-		m.ProcessorDetected,
-		m.ProcessorApplied,
 		m.CABundleHash,
 		m.CABundleLastModified,
 		m.CABundleCertCount,
@@ -101,4 +92,12 @@ func newMetrics() *Metrics {
 	)
 
 	return m
+}
+
+// nodeName returns NODE_NAME env var or "unknown".
+func nodeName() string {
+	if v := strings.TrimSpace(os.Getenv("NODE_NAME")); v != "" {
+		return v
+	}
+	return "unknown"
 }
