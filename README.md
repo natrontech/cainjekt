@@ -112,7 +112,7 @@ Both `linux/amd64` and `linux/arm64` platforms are supported.
 - **Distroless/scratch images**: No `/etc/os-release`, limited writable filesystem — fallback processor may not detect the correct trust store
 - **Read-only root filesystems**: OS trust store cannot be modified, but language processors (Java, Node.js, Python) still work via env vars pointing to the dynamic CA path
 - **Fail-open default**: Failed injection is silent — container starts without CA (check pod logs for warnings)
-- **Nodes without NRI**: Some managed Kubernetes nodes (e.g. AKS GPU nodes) don't have NRI enabled in containerd. The plugin runs in idle mode on these nodes — healthy but no injection. Check pod logs for "NRI not available on this node"
+- **Nodes without NRI**: Some managed Kubernetes nodes (e.g. AKS GPU nodes) don't have NRI enabled in containerd. The plugin will crash-loop on these nodes — exclude them via `nodeSelector` or `affinity` in the Helm values
 
 ## Language Processors
 

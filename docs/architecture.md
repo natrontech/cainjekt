@@ -147,7 +147,7 @@ The DaemonSet runs with `privileged: true`. This is required because:
 
 ### Nodes Without NRI
 
-Some managed Kubernetes nodes don't have NRI enabled in their containerd configuration — for example, AKS GPU nodes use a custom containerd config for the NVIDIA runtime that may not include the NRI plugin. When the NRI socket (`/var/run/nri/nri.sock`) is not available, the plugin logs a warning and enters idle mode: the health endpoint stays running (so the DaemonSet doesn't crash-loop) but no CA injection happens on that node.
+Some managed Kubernetes nodes don't have NRI enabled in their containerd configuration — for example, AKS GPU nodes use a custom containerd config for the NVIDIA runtime that may not include the NRI plugin. When the NRI socket (`/var/run/nri/nri.sock`) is not available, the plugin exits with a clear error message. The DaemonSet will crash-loop on that node, which is intentional — CrashLoopBackOff is the most visible signal to platform teams and existing monitoring will catch it. The fix is to either enable NRI on the node or exclude it via `nodeSelector`/`affinity`.
 
 ### Safety Guarantees
 

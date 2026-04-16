@@ -2,9 +2,9 @@
 
 ## Supported Versions
 
-| Version | Supported          |
-|---------|--------------------|
-| latest  | :white_check_mark: |
+| Version | Supported |
+|---------|-----------|
+| latest  | Yes       |
 
 We only support the latest release. Please upgrade before reporting issues.
 
