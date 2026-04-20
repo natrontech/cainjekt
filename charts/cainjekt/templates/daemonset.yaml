@@ -141,6 +141,9 @@ spec:
           configMap:
             name: {{ include "cainjekt.caBundleConfigMapName" . }}
             optional: false
+            items:
+              - key: {{ .Values.caBundleKey | quote }}
+                path: ca-bundle.pem
         - name: dynamic-ca-root
           hostPath:
             path: /run/cainjekt

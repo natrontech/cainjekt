@@ -49,8 +49,12 @@ imagePullSecrets: []
 caBundle: ""
 
 ## @param caBundleExistingConfigMap Use an existing ConfigMap for the CA bundle instead of creating one
-## The ConfigMap must have a key named `ca-bundle.pem`
+## Set `caBundleKey` to match the key name within that ConfigMap.
 caBundleExistingConfigMap: ""
+
+## @param caBundleKey Key within the ConfigMap (chart-managed or existing) that holds the PEM bundle
+## The file is always projected into the container as `/etc/cainjekt/ca-bundle.pem` regardless of this key name.
+caBundleKey: "ca-bundle.pem"
 
 plugin:
   ## @param plugin.name NRI plugin name
