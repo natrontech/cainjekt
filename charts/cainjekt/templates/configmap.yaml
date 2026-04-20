@@ -7,6 +7,6 @@ metadata:
   labels:
     {{- include "cainjekt.labels" . | nindent 4 }}
 data:
-  ca-bundle.pem: |
+  {{ .Values.caBundleKey }}: |
     {{- .Values.caBundle | nindent 4 }}
 {{- end }}

@@ -150,6 +150,12 @@ func (p *Plugin) CreateContainer(
 	sourceCAFile := getenvOr(config.EnvCAFile, config.DefaultCAFile)
 	caFileForHook, caContent, err := stageDynamicCAFile(sourceCAFile, dynamicCARoot(), ctr)
 	if err != nil {
+		p.log.Error("failed to stage CA file for container",
+			"error", err,
+			"sourceCAFile", sourceCAFile,
+			"namespace", pod.GetNamespace(),
+			"pod", pod.GetName(),
+			"container", ctr.GetName())
 		_ = cleanupDynamicCAFile(dynamicCARoot(), ctr)
 		p.metrics.InjectionsErrors.Inc()
 		return nil, nil, err

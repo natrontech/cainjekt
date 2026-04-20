@@ -16,6 +16,10 @@ You must provide a CA bundle for injection to work. Either:
 
      helm upgrade {{ .Release.Name }} natrontech/cainjekt \
        --set caBundleExistingConfigMap=my-ca-bundle
+
+     If the ConfigMap key is not `ca-bundle.pem`, also set `caBundleKey`:
+       --set caBundleExistingConfigMap=my-ca-bundle \
+       --set caBundleKey=ca.crt
 {{- end }}
 
 To inject CA certificates into a pod, add the annotation:

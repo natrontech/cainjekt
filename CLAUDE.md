@@ -93,6 +93,11 @@ helm install cainjekt charts/cainjekt \
   --set-file caBundle=/path/to/ca-bundle.pem
 ```
 
+For an existing ConfigMap with a non-standard key name, combine
+`caBundleExistingConfigMap` with `caBundleKey` (e.g. `--set caBundleKey=ca.crt`).
+The chart projects it to `/etc/cainjekt/ca-bundle.pem` via `items:` so the env
+var stays constant.
+
 CA bundle updates are picked up automatically for new containers (ConfigMap volume refresh).
 
 **Kustomize**: `deploy/kubernetes/` with `deploy.sh` helper script.

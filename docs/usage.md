@@ -32,7 +32,20 @@ helm install cainjekt oci://ghcr.io/natrontech/charts/cainjekt \
   --set caBundleExistingConfigMap=my-existing-ca-configmap
 ```
 
-The ConfigMap must have a key named `ca-bundle.pem`.
+By default the chart expects a ConfigMap key named `ca-bundle.pem`. If your
+existing ConfigMap uses a different key (for example `ca.crt` or `tls.crt`),
+set `caBundleKey` to match:
+
+```bash
+helm install cainjekt oci://ghcr.io/natrontech/charts/cainjekt \
+  --namespace kube-system \
+  --set caBundleExistingConfigMap=my-existing-ca-configmap \
+  --set caBundleKey=ca.crt
+```
+
+The file is always projected into the plugin container as
+`/etc/cainjekt/ca-bundle.pem`, so `CAINJEKT_CA_FILE` does not need to be
+changed.
 
 ## Enabling CA Injection
 
