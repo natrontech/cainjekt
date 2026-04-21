@@ -207,47 +207,44 @@ spec:
 	t.Log("Status file test passed")
 }
 
-// ensureHelmRelease installs cainjekt via Helm if not already installed.
+// ensureHelmRelease installs cainjekt via Helm if not already installed, and
+// always waits until the DaemonSet is fully rolled out (updated == desired == ready).
+// This guarantees the NRI plugin has synchronised with containerd before the
+// caller schedules a test pod — without it, test pods can race the plugin and
+// their containers will not be intercepted.
 func ensureHelmRelease(t *testing.T, clusterName string) {
 	t.Helper()
 
-	// Check if already installed and DaemonSet is ready.
-	_, err := runCmdWithInput(10*time.Second, "", "helm", "status", "cainjekt-e2e", "-n", "kube-system")
-	if err == nil {
-		// Wait for DaemonSet to be ready (may have just been installed by another test).
-		for i := 0; i < 20; i++ {
-			ready, _ := runCmdWithInput(10*time.Second, "", "kubectl", "get", "daemonset", "cainjekt-e2e",
-				"-n", "kube-system", "-o", "jsonpath={.status.numberReady}")
-			if strings.TrimSpace(ready) != "" && strings.TrimSpace(ready) != "0" {
-				return
-			}
-			time.Sleep(3 * time.Second)
-		}
-		return
+	installed := tryCmd(10*time.Second, "helm", "status", "cainjekt-e2e", "-n", "kube-system") == nil
+	if !installed {
+		runCmd(t, 5*time.Minute, "make", "kind-load", "CLUSTER_NAME="+clusterName)
+
+		caPath := writeTempCABundle(t)
+		chartDir := filepath.Join(mustGetProjectRoot(t), "charts", "cainjekt")
+
+		runCmd(t, 2*time.Minute, "helm", "install", "cainjekt-e2e", chartDir,
+			"--namespace", "kube-system",
+			"--set", "image.repository=cainjekt",
+			"--set", "image.tag=latest",
+			"--set", "image.pullPolicy=IfNotPresent",
+			"--set", "installerImage.repository=cainjekt-installer",
+			"--set", "installerImage.tag=latest",
+			"--set", "installerImage.pullPolicy=IfNotPresent",
+			"--set-file", "caBundle="+caPath,
+			"--wait",
+			"--timeout", "3m",
+		)
+
+		t.Cleanup(func() {
+			_ = tryCmd(1*time.Minute, "helm", "uninstall", "cainjekt-e2e", "-n", "kube-system")
+		})
 	}
 
-	// Build and load images.
-	runCmd(t, 5*time.Minute, "make", "kind-load", "CLUSTER_NAME="+clusterName)
-
-	caPath := writeTempCABundle(t)
-	chartDir := filepath.Join(mustGetProjectRoot(t), "charts", "cainjekt")
-
-	runCmd(t, 2*time.Minute, "helm", "install", "cainjekt-e2e", chartDir,
-		"--namespace", "kube-system",
-		"--set", "image.repository=cainjekt",
-		"--set", "image.tag=latest",
-		"--set", "image.pullPolicy=IfNotPresent",
-		"--set", "installerImage.repository=cainjekt-installer",
-		"--set", "installerImage.tag=latest",
-		"--set", "installerImage.pullPolicy=IfNotPresent",
-		"--set-file", "caBundle="+caPath,
-		"--wait",
-		"--timeout", "3m",
-	)
-
-	t.Cleanup(func() {
-		_ = tryCmd(1*time.Minute, "helm", "uninstall", "cainjekt-e2e", "-n", "kube-system")
-	})
+	// Wait until the DaemonSet is fully rolled out. `rollout status` blocks
+	// until updated == desired and numberReady == desired, and the readiness
+	// probe now only flips to Ready after the plugin's Synchronize() fires.
+	runCmd(t, 3*time.Minute, "kubectl", "-n", "kube-system",
+		"rollout", "status", "daemonset", "cainjekt-e2e", "--timeout=3m")
 }
 
 // waitForPodPhase waits until the named pod reaches the given phase AND all containers are ready.
