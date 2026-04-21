@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+	"sync/atomic"
 	"syscall"
 
 	"github.com/containerd/nri/pkg/api"
@@ -25,6 +26,7 @@ type Plugin struct {
 	metrics *Metrics
 	tracked sync.Map // map[string]struct{} — sanitized container IDs
 	nsCache *nsLabelCache
+	ready   atomic.Bool // true once the runtime has synchronised with us
 }
 
 // Run starts the NRI plugin, HTTP server, orphan cleaner, and blocks until shutdown.
@@ -61,7 +63,7 @@ func Run(log *slog.Logger, args []string) error {
 	}
 
 	// Start HTTP server for health/readiness/metrics (always, even if NRI is unavailable).
-	srv := newHTTPServer(httpAddr, metrics)
+	srv := newHTTPServer(httpAddr, metrics, p.ready.Load)
 	go func() {
 		log.Info("starting HTTP server", "addr", httpAddr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -275,6 +277,19 @@ func (p *Plugin) RemoveContainer(_ context.Context, pod *api.PodSandbox, ctr *ap
 }
 
 func (p *Plugin) onClose() {
+	p.ready.Store(false)
 	p.log.Info("connection to runtime lost")
 	os.Exit(1)
+}
+
+// Synchronize is invoked by the NRI stub once the runtime has finished handshaking
+// and is ready to dispatch container lifecycle events. We use this as the signal
+// that the plugin is truly ready — before this, the HTTP server is up but NRI
+// wouldn't see any CreateContainer calls.
+func (p *Plugin) Synchronize(
+	_ context.Context, _ []*api.PodSandbox, _ []*api.Container,
+) ([]*api.ContainerUpdate, error) {
+	p.ready.Store(true)
+	p.log.Info("runtime synchronised, plugin is ready")
+	return nil, nil
 }
