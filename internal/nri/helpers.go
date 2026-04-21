@@ -19,32 +19,94 @@ func newPlugin(log *slog.Logger) *Plugin {
 	return &Plugin{log: log, metrics: newMetrics(), nsCache: newNSLabelCache()}
 }
 
-// shouldInject checks pod annotations, pod labels, and namespace labels for the opt-in key.
+// injectDecision explains why a pod was (or wasn't) selected for injection.
+// Source identifies where the opt-in/out signal came from; reason is a short tag
+// suitable for a log field. When inject is false but a matching key was examined
+// with an unexpected value, value holds that value for diagnostics.
+type injectDecision struct {
+	inject bool
+	source string // pod-annotation | pod-label | namespace-label | default
+	reason string // opted-in | explicit-opt-out | not-opted-in
+	value  string // observed value when explicit-opt-out
+}
+
+// decide checks pod annotations, pod labels, and namespace labels for the opt-in key.
 // Pod-level annotation takes highest priority. Then pod labels. Then namespace labels
 // (fetched from the Kubernetes API with caching).
-func shouldInject(pod *api.PodSandbox, nsCache *nsLabelCache) bool {
+func decide(pod *api.PodSandbox, nsCache *nsLabelCache) injectDecision {
 	annos := pod.GetAnnotations()
 	labels := pod.GetLabels()
 	key := config.AnnoEnabled()
 
-	// Pod-level explicit opt-in/out (highest priority).
 	if v, ok := annos[key]; ok {
-		return strings.EqualFold(v, "true")
+		return decisionFromValue(v, "pod-annotation")
 	}
-
-	// Pod-level label.
 	if v, ok := labels[key]; ok {
-		return strings.EqualFold(v, "true")
+		return decisionFromValue(v, "pod-label")
 	}
-
-	// Namespace-level label (fetched from K8s API).
 	if nsCache != nil && pod.GetNamespace() != "" {
 		if v, ok := nsCache.getLabel(pod.GetNamespace(), key); ok {
-			return strings.EqualFold(v, "true")
+			return decisionFromValue(v, "namespace-label")
 		}
 	}
+	return injectDecision{source: "default", reason: "not-opted-in"}
+}
 
-	return false
+func decisionFromValue(v, source string) injectDecision {
+	if strings.EqualFold(v, "true") {
+		return injectDecision{inject: true, source: source, reason: "opted-in"}
+	}
+	return injectDecision{source: source, reason: "explicit-opt-out", value: v}
+}
+
+// suspiciousKeys returns keys on the pod/namespace that share the cainjekt
+// annotation prefix but are not recognised. These usually indicate a typo in
+// the opt-in key (e.g. `.../enable` instead of `.../enabled`).
+func suspiciousKeys(pod *api.PodSandbox, nsCache *nsLabelCache) []string {
+	prefix := config.AnnotationPrefix() + "/"
+	known := map[string]struct{}{
+		config.AnnoEnabled():           {},
+		config.AnnoExcludeContainers(): {},
+		prefix + "processors.include":  {},
+		prefix + "processors.exclude":  {},
+	}
+	seen := map[string]struct{}{}
+	collect := func(m map[string]string) {
+		for k := range m {
+			if !strings.HasPrefix(k, prefix) {
+				continue
+			}
+			if _, ok := known[k]; ok {
+				continue
+			}
+			seen[k] = struct{}{}
+		}
+	}
+	collect(pod.GetAnnotations())
+	collect(pod.GetLabels())
+	if nsCache != nil && pod.GetNamespace() != "" {
+		// Best-effort: reads from cache only. We don't trigger a fetch here.
+		if labels, ok := nsCache.getCachedLabels(pod.GetNamespace()); ok {
+			collect(labels)
+		}
+	}
+	if len(seen) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(seen))
+	for k := range seen {
+		out = append(out, k)
+	}
+	return out
+}
+
+// shortID returns the last 12 characters of a sanitized container id for logging.
+func shortID(ctr *api.Container) string {
+	id := sanitizePathToken(ctr.GetId())
+	if len(id) > 12 {
+		return id[len(id)-12:]
+	}
+	return id
 }
 
 // isContainerExcluded checks the pod annotation for per-container opt-out.
@@ -78,19 +140,23 @@ func updateCABundleGauges(m *Metrics, caFilePath string, content []byte) {
 	if fi, err := os.Stat(caFilePath); err == nil {
 		m.CABundleLastModified.Set(float64(fi.ModTime().Unix()))
 	}
+	m.CABundleCertCount.Set(float64(pemCertCount(content)))
+}
+
+// pemCertCount counts the CERTIFICATE blocks in a PEM bundle.
+func pemCertCount(content []byte) int {
 	count := 0
 	rest := content
 	for {
 		var block *pem.Block
 		block, rest = pem.Decode(rest)
 		if block == nil {
-			break
+			return count
 		}
 		if block.Type == "CERTIFICATE" {
 			count++
 		}
 	}
-	m.CABundleCertCount.Set(float64(count))
 }
 
 func hasEnv(env []string, key string) bool {

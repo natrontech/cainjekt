@@ -112,7 +112,12 @@ func Run(log *slog.Logger, args []string) error {
 
 // PostCreateContainer logs container creation events.
 func (p *Plugin) PostCreateContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) error {
-	p.log.Info("post create container", "namespace", pod.GetNamespace(), "pod", pod.GetName(), "container", ctr.GetName())
+	p.log.Debug("post create container",
+		"namespace", pod.GetNamespace(),
+		"pod", pod.GetName(),
+		"container", ctr.GetName(),
+		"container_id", shortID(ctr),
+	)
 	return nil
 }
 
@@ -120,16 +125,43 @@ func (p *Plugin) PostCreateContainer(_ context.Context, pod *api.PodSandbox, ctr
 func (p *Plugin) CreateContainer(
 	_ context.Context, pod *api.PodSandbox, ctr *api.Container,
 ) (*api.ContainerAdjustment, []*api.ContainerUpdate, error) {
-	p.log.Info("create container", "namespace", pod.GetNamespace(), "pod", pod.GetName(), "container", ctr.GetName())
+	cid := shortID(ctr)
+	base := []any{
+		"namespace", pod.GetNamespace(),
+		"pod", pod.GetName(),
+		"container", ctr.GetName(),
+		"container_id", cid,
+		"runtime_handler", pod.GetRuntimeHandler(),
+	}
 
-	if !shouldInject(pod, p.nsCache) {
+	p.log.Debug("create container examined",
+		append(base,
+			"pod_annotations", pod.GetAnnotations(),
+			"pod_labels", pod.GetLabels(),
+			"opt_in_key", config.AnnoEnabled(),
+		)...,
+	)
+
+	d := decide(pod, p.nsCache)
+	if !d.inject {
+		// Flag typos in the cainjekt-prefixed keys — a common cause of silent skips.
+		if suspects := suspiciousKeys(pod, p.nsCache); len(suspects) > 0 {
+			p.log.Warn("skip: pod has cainjekt-prefixed keys but no recognised opt-in — check for typos",
+				append(base, "expected_key", config.AnnoEnabled(), "unrecognised_keys", suspects)...)
+		} else if d.reason == "explicit-opt-out" {
+			p.log.Info("skip: explicit opt-out",
+				append(base, "source", d.source, "value", d.value)...)
+		} else {
+			p.log.Debug("skip: not opted in", append(base, "source", d.source)...)
+		}
 		p.metrics.SkippedTotal.Inc()
 		return nil, nil, nil
 	}
 
 	// Per-container opt-out via annotation.
 	if isContainerExcluded(pod, ctr) {
-		p.log.Info("container excluded from injection", "container", ctr.GetName())
+		p.log.Info("skip: container excluded by annotation",
+			append(base, "annotation", config.AnnoExcludeContainers())...)
 		p.metrics.SkippedTotal.Inc()
 		return nil, nil, nil
 	}
@@ -151,11 +183,7 @@ func (p *Plugin) CreateContainer(
 	caFileForHook, caContent, err := stageDynamicCAFile(sourceCAFile, dynamicCARoot(), ctr)
 	if err != nil {
 		p.log.Error("failed to stage CA file for container",
-			"error", err,
-			"sourceCAFile", sourceCAFile,
-			"namespace", pod.GetNamespace(),
-			"pod", pod.GetName(),
-			"container", ctr.GetName())
+			append(base, "error", err, "sourceCAFile", sourceCAFile)...)
 		_ = cleanupDynamicCAFile(dynamicCARoot(), ctr)
 		p.metrics.InjectionsErrors.Inc()
 		return nil, nil, err
@@ -174,6 +202,16 @@ func (p *Plugin) CreateContainer(
 
 	// Update CA bundle age and cert count gauges.
 	updateCABundleGauges(p.metrics, sourceCAFile, caContent)
+
+	p.log.Info("inject: ca bundle staged",
+		append(base,
+			"source", d.source,
+			"ca_hash", caHash[:12],
+			"ca_cert_count", pemCertCount(caContent),
+			"ca_bytes", len(caContent),
+			"dynamic_ca_path", caFileForHook,
+		)...,
+	)
 
 	hook := &api.Hook{
 		Path: self,
@@ -208,7 +246,14 @@ func (p *Plugin) CreateContainer(
 
 // RemoveContainer cleans up per-container dynamic CA files.
 func (p *Plugin) RemoveContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) error {
-	p.log.Info("removed container", "namespace", pod.GetNamespace(), "pod", pod.GetName(), "container", ctr.GetName())
+	cid := shortID(ctr)
+	base := []any{
+		"namespace", pod.GetNamespace(),
+		"pod", pod.GetName(),
+		"container", ctr.GetName(),
+		"container_id", cid,
+	}
+	p.log.Debug("removed container", base...)
 
 	// Untrack container.
 	key, _ := containerCAKey(ctr)
@@ -218,13 +263,13 @@ func (p *Plugin) RemoveContainer(_ context.Context, pod *api.PodSandbox, ctr *ap
 		}
 	}
 
-	if !shouldInject(pod, p.nsCache) {
+	if !decide(pod, p.nsCache).inject {
 		return nil
 	}
 	p.metrics.CleanupsTotal.Inc()
 	if err := cleanupDynamicCAFile(dynamicCARoot(), ctr); err != nil {
 		p.metrics.CleanupsErrors.Inc()
-		p.log.Warn("failed to cleanup dynamic CA bundle", "error", err)
+		p.log.Warn("failed to cleanup dynamic CA bundle", append(base, "error", err)...)
 	}
 	return nil
 }
