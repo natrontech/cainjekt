@@ -164,6 +164,104 @@ func TestCreateContainerReturnsErrorWhenContainerIDEmpty(t *testing.T) {
 	}
 }
 
+func TestCreateContainerSetsBreadcrumbDirEnv(t *testing.T) {
+	t.Setenv(config.EnvCAFile, writeTempSourceCA(t))
+	t.Setenv(config.EnvDynamicCARoot, t.TempDir())
+
+	p := newPlugin(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	pod := &api.PodSandbox{
+		Namespace:   "default",
+		Name:        "pod-bc",
+		Annotations: map[string]string{config.AnnoEnabled(): "true"},
+	}
+	ctr := &api.Container{Id: "containerd://breadcrumb01", Name: "app", Args: []string{"sleep", "1"}}
+
+	adj, _, err := p.CreateContainer(context.Background(), pod, ctr)
+	if err != nil {
+		t.Fatalf("CreateContainer() error = %v", err)
+	}
+	hook := adj.GetHooks().GetCreateRuntime()[0]
+	bcDir := envValue(hook.GetEnv(), config.EnvBreadcrumbDir)
+	caPath := envValue(hook.GetEnv(), config.EnvCAFile)
+	if bcDir == "" || bcDir != filepath.Dir(caPath) {
+		t.Fatalf("breadcrumb dir = %q, expected %q", bcDir, filepath.Dir(caPath))
+	}
+}
+
+func TestPostCreateContainerWarnsOnIncompleteHook(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(config.EnvCAFile, writeTempSourceCA(t))
+	t.Setenv(config.EnvDynamicCARoot, root)
+
+	var buf strings.Builder
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	p := newPlugin(logger)
+	pod := &api.PodSandbox{
+		Namespace:   "default",
+		Name:        "pod-pc",
+		Annotations: map[string]string{config.AnnoEnabled(): "true"},
+	}
+	ctr := &api.Container{Id: "containerd://incomplete01", Name: "app", Args: []string{"sleep", "1"}}
+
+	if _, _, err := p.CreateContainer(context.Background(), pod, ctr); err != nil {
+		t.Fatalf("CreateContainer() error = %v", err)
+	}
+
+	dir, _ := containerCADir(root, ctr)
+	// Simulate a hook that started, recorded progress on osstore-debian, then was SIGKILLed.
+	if err := os.WriteFile(filepath.Join(dir, config.BreadcrumbStarted), []byte("t"), 0o600); err != nil {
+		t.Fatalf("write started: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, config.BreadcrumbProgress), []byte("osstore-debian"), 0o600); err != nil {
+		t.Fatalf("write progress: %v", err)
+	}
+
+	if err := p.PostCreateContainer(context.Background(), pod, ctr); err != nil {
+		t.Fatalf("PostCreateContainer() error = %v", err)
+	}
+	logs := buf.String()
+	if !strings.Contains(logs, "hook started but did not complete") {
+		t.Fatalf("expected incomplete-hook warning, got: %s", logs)
+	}
+	if !strings.Contains(logs, "last_progress=osstore-debian") {
+		t.Fatalf("expected last_progress in log, got: %s", logs)
+	}
+}
+
+func TestPostCreateContainerSilentWhenHookCompleted(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(config.EnvCAFile, writeTempSourceCA(t))
+	t.Setenv(config.EnvDynamicCARoot, root)
+
+	var buf strings.Builder
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	p := newPlugin(logger)
+	pod := &api.PodSandbox{
+		Namespace:   "default",
+		Name:        "pod-ok",
+		Annotations: map[string]string{config.AnnoEnabled(): "true"},
+	}
+	ctr := &api.Container{Id: "containerd://complete01", Name: "app", Args: []string{"sleep", "1"}}
+
+	if _, _, err := p.CreateContainer(context.Background(), pod, ctr); err != nil {
+		t.Fatalf("CreateContainer() error = %v", err)
+	}
+
+	dir, _ := containerCADir(root, ctr)
+	for _, name := range []string{config.BreadcrumbStarted, config.BreadcrumbDone} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("t"), 0o600); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+
+	if err := p.PostCreateContainer(context.Background(), pod, ctr); err != nil {
+		t.Fatalf("PostCreateContainer() error = %v", err)
+	}
+	if strings.Contains(buf.String(), "did not complete") || strings.Contains(buf.String(), "did not run") {
+		t.Fatalf("did not expect warning, got: %s", buf.String())
+	}
+}
+
 func writeTempSourceCA(t *testing.T) string {
 	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)

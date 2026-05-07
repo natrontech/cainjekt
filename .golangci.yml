@@ -11,6 +11,7 @@ issues:
       linters:
         - dupl
         - lll
+        - goconst
 
 formatters:
   enable:

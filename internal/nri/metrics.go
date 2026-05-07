@@ -22,6 +22,7 @@ type Metrics struct {
 	CABundleLastModified prometheus.Gauge
 	CABundleCertCount    prometheus.Gauge
 	NRIAvailable         *prometheus.GaugeVec
+	HookIncompleteTotal  prometheus.Counter
 }
 
 func newMetrics() *Metrics {
@@ -75,6 +76,10 @@ func newMetrics() *Metrics {
 			Name: "cainjekt_nri_available",
 			Help: "Whether NRI is available on this node (1=yes, 0=no).",
 		}, []string{"node"}),
+		HookIncompleteTotal: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "cainjekt_hook_incomplete_total",
+			Help: "OCI hooks that did not finish (likely SIGKILLed by containerd on timeout).",
+		}),
 	}
 
 	reg.MustRegister(
@@ -89,6 +94,7 @@ func newMetrics() *Metrics {
 		m.CABundleLastModified,
 		m.CABundleCertCount,
 		m.NRIAvailable,
+		m.HookIncompleteTotal,
 	)
 
 	return m

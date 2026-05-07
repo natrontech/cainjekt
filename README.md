@@ -94,7 +94,7 @@ Both `linux/amd64` and `linux/arm64` platforms are supported.
 | `CAINJEKT_ANNOTATION_PREFIX` | `cainjekt.natron.io` | Annotation prefix for pod opt-in |
 | `CAINJEKT_FAIL_POLICY` | `fail-open` | `fail-open` or `fail-closed` |
 | `CAINJEKT_LOG_LEVEL` | `info` | Log level: `debug`, `info`, `warn`, `error` |
-| `CAINJEKT_HOOK_TIMEOUT_SEC` | `5` | OCI hook timeout in seconds (containerd kills hook if exceeded) |
+| `CAINJEKT_HOOK_TIMEOUT_SEC` | `20` | OCI hook timeout in seconds (containerd SIGKILLs hook if exceeded) |
 | `CAINJEKT_DYNAMIC_CA_ROOT` | `/run/cainjekt/containers` | Per-container CA staging root |
 
 ### Pod Annotations

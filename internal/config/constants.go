@@ -22,6 +22,7 @@ const (
 	EnvLogLevel          = "CAINJEKT_LOG_LEVEL"
 	EnvHookTimeoutSec    = "CAINJEKT_HOOK_TIMEOUT_SEC"
 	EnvExcludeContainers = "CAINJEKT_EXCLUDE_CONTAINERS"
+	EnvBreadcrumbDir     = "CAINJEKT_BREADCRUMB_DIR"
 
 	DefaultAnnotationPrefix = "cainjekt.natron.io"
 
@@ -33,7 +34,11 @@ const (
 	HookContextFile         = "/etc/cainjekt/hook-context.json"
 	DefaultPluginBinaryPath = "/opt/cainjekt/bin/cainjekt"
 
-	DefaultHookTimeoutSec = 2
+	DefaultHookTimeoutSec = 20
+
+	BreadcrumbStarted  = "hook.started"
+	BreadcrumbProgress = "hook.progress"
+	BreadcrumbDone     = "hook.done"
 )
 
 // annotationPrefix is the resolved prefix, set once at init.

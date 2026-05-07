@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -112,14 +114,49 @@ func Run(log *slog.Logger, args []string) error {
 	}
 }
 
-// PostCreateContainer logs container creation events.
+// PostCreateContainer fires after the runtime creates the container, which is
+// after the OCI CreateRuntime hook has run (or been killed by containerd on
+// timeout). We use it to verify the hook actually completed by inspecting the
+// breadcrumb files left in the staged dir on the node — containerd SIGKILLs
+// timed-out hooks, so they can't report failure themselves.
 func (p *Plugin) PostCreateContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) error {
-	p.log.Debug("post create container",
+	cid := shortID(ctr)
+	base := []any{
 		"namespace", pod.GetNamespace(),
 		"pod", pod.GetName(),
 		"container", ctr.GetName(),
-		"container_id", shortID(ctr),
-	)
+		"container_id", cid,
+	}
+	p.log.Debug("post create container", base...)
+
+	key, err := containerCAKey(ctr)
+	if err != nil || key == "" {
+		return nil
+	}
+	if _, tracked := p.tracked.Load(key); !tracked {
+		return nil // skipped or not opted in
+	}
+
+	dir := filepath.Join(dynamicCARoot(), key)
+	if _, err := os.Stat(filepath.Join(dir, config.BreadcrumbDone)); err == nil {
+		return nil
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, config.BreadcrumbStarted)); err != nil {
+		p.log.Warn("hook did not run for tracked container — check containerd OCI hook handling and journalctl -u containerd",
+			append(base, "timeout_sec", hookTimeoutSec())...)
+		p.metrics.HookIncompleteTotal.Inc()
+		return nil
+	}
+
+	progress := ""
+	if b, err := os.ReadFile(filepath.Join(dir, config.BreadcrumbProgress)); err == nil {
+		progress = strings.TrimSpace(string(b))
+	}
+	p.log.Warn("hook started but did not complete — likely SIGKILLed on timeout; "+
+		"bump CAINJEKT_HOOK_TIMEOUT_SEC or inspect journalctl -u containerd",
+		append(base, "last_progress", progress, "timeout_sec", hookTimeoutSec())...)
+	p.metrics.HookIncompleteTotal.Inc()
 	return nil
 }
 
@@ -224,6 +261,7 @@ func (p *Plugin) CreateContainer(
 			config.EnvHookContextFile + "=" + config.HookContextFile,
 			config.EnvAnnotationPrefix + "=" + config.AnnotationPrefix(),
 			config.EnvLogLevel + "=" + getenvOr(config.EnvLogLevel, "info"),
+			config.EnvBreadcrumbDir + "=" + filepath.Dir(caFileForHook),
 		},
 		Timeout: api.Int(hookTimeoutSec()),
 	}
