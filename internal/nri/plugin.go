@@ -114,12 +114,26 @@ func Run(log *slog.Logger, args []string) error {
 	}
 }
 
-// PostCreateContainer fires after the runtime creates the container, which is
-// after the OCI CreateRuntime hook has run (or been killed by containerd on
-// timeout). We use it to verify the hook actually completed by inspecting the
-// breadcrumb files left in the staged dir on the node — containerd SIGKILLs
-// timed-out hooks, so they can't report failure themselves.
+// PostCreateContainer logs container creation events. Note: in containerd's
+// NRI integration this fires during the CRI Create phase, BEFORE the runtime
+// has executed the OCI CreateRuntime hook — so it cannot be used to verify
+// the hook ran. Verification happens in PostStartContainer.
 func (p *Plugin) PostCreateContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) error {
+	p.log.Debug("post create container",
+		"namespace", pod.GetNamespace(),
+		"pod", pod.GetName(),
+		"container", ctr.GetName(),
+		"container_id", shortID(ctr),
+	)
+	return nil
+}
+
+// PostStartContainer fires after the runtime has started the container, which
+// is after the OCI CreateRuntime hook has run (or been SIGKILLed by containerd
+// on timeout). We inspect breadcrumbs in the staged dir on the node to detect
+// hooks that didn't complete — useful on managed Kubernetes (AKS, GKE) where
+// operators don't have node shell access to read journalctl.
+func (p *Plugin) PostStartContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) error {
 	cid := shortID(ctr)
 	base := []any{
 		"namespace", pod.GetNamespace(),
@@ -127,7 +141,6 @@ func (p *Plugin) PostCreateContainer(_ context.Context, pod *api.PodSandbox, ctr
 		"container", ctr.GetName(),
 		"container_id", cid,
 	}
-	p.log.Debug("post create container", base...)
 
 	key, err := containerCAKey(ctr)
 	if err != nil || key == "" {
@@ -143,7 +156,8 @@ func (p *Plugin) PostCreateContainer(_ context.Context, pod *api.PodSandbox, ctr
 	}
 
 	if _, err := os.Stat(filepath.Join(dir, config.BreadcrumbStarted)); err != nil {
-		p.log.Warn("hook did not run for tracked container — check containerd OCI hook handling and journalctl -u containerd",
+		p.log.Warn("hook did not run for tracked container — "+
+			"verify NRI is enabled and the runtime honours OCI CreateRuntime hooks",
 			append(base, "timeout_sec", hookTimeoutSec())...)
 		p.metrics.HookIncompleteTotal.Inc()
 		return nil
@@ -154,7 +168,7 @@ func (p *Plugin) PostCreateContainer(_ context.Context, pod *api.PodSandbox, ctr
 		progress = strings.TrimSpace(string(b))
 	}
 	p.log.Warn("hook started but did not complete — likely SIGKILLed on timeout; "+
-		"bump CAINJEKT_HOOK_TIMEOUT_SEC or inspect journalctl -u containerd",
+		"bump CAINJEKT_HOOK_TIMEOUT_SEC",
 		append(base, "last_progress", progress, "timeout_sec", hookTimeoutSec())...)
 	p.metrics.HookIncompleteTotal.Inc()
 	return nil

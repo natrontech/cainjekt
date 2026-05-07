@@ -188,7 +188,7 @@ func TestCreateContainerSetsBreadcrumbDirEnv(t *testing.T) {
 	}
 }
 
-func TestPostCreateContainerWarnsOnIncompleteHook(t *testing.T) {
+func TestPostStartContainerWarnsOnIncompleteHook(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv(config.EnvCAFile, writeTempSourceCA(t))
 	t.Setenv(config.EnvDynamicCARoot, root)
@@ -216,7 +216,7 @@ func TestPostCreateContainerWarnsOnIncompleteHook(t *testing.T) {
 		t.Fatalf("write progress: %v", err)
 	}
 
-	if err := p.PostCreateContainer(context.Background(), pod, ctr); err != nil {
+	if err := p.PostStartContainer(context.Background(), pod, ctr); err != nil {
 		t.Fatalf("PostCreateContainer() error = %v", err)
 	}
 	logs := buf.String()
@@ -228,7 +228,7 @@ func TestPostCreateContainerWarnsOnIncompleteHook(t *testing.T) {
 	}
 }
 
-func TestPostCreateContainerSilentWhenHookCompleted(t *testing.T) {
+func TestPostStartContainerSilentWhenHookCompleted(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv(config.EnvCAFile, writeTempSourceCA(t))
 	t.Setenv(config.EnvDynamicCARoot, root)
@@ -254,7 +254,7 @@ func TestPostCreateContainerSilentWhenHookCompleted(t *testing.T) {
 		}
 	}
 
-	if err := p.PostCreateContainer(context.Background(), pod, ctr); err != nil {
+	if err := p.PostStartContainer(context.Background(), pod, ctr); err != nil {
 		t.Fatalf("PostCreateContainer() error = %v", err)
 	}
 	if strings.Contains(buf.String(), "did not complete") || strings.Contains(buf.String(), "did not run") {
