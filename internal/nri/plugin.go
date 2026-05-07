@@ -15,6 +15,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"syscall"
+	"time"
 
 	"github.com/containerd/nri/pkg/api"
 	"github.com/containerd/nri/pkg/stub"
@@ -23,12 +24,15 @@ import (
 
 // Plugin implements the NRI stub interface for CA certificate injection.
 type Plugin struct {
-	stub    stub.Stub
-	log     *slog.Logger
-	metrics *Metrics
-	tracked sync.Map // map[string]struct{} — sanitized container IDs
-	nsCache *nsLabelCache
-	ready   atomic.Bool // true once the runtime has synchronised with us
+	stub      stub.Stub
+	log       *slog.Logger
+	metrics   *Metrics
+	tracked   sync.Map // map[string]struct{} — sanitized container IDs
+	nsCache   *nsLabelCache
+	ready     atomic.Bool    // true once the runtime has synchronised with us
+	verifyWG  sync.WaitGroup // tracks in-flight hook-verification goroutines
+	stopCh    chan struct{}  // closed on shutdown to abort verification waits
+	closeOnce sync.Once
 }
 
 // Run starts the NRI plugin, HTTP server, orphan cleaner, and blocks until shutdown.
@@ -51,7 +55,7 @@ func Run(log *slog.Logger, args []string) error {
 
 	metrics := newMetrics()
 	nsCache := newNSLabelCache()
-	p := &Plugin{log: log, metrics: metrics, nsCache: nsCache}
+	p := &Plugin{log: log, metrics: metrics, nsCache: nsCache, stopCh: make(chan struct{})}
 
 	opts := []stub.Option{stub.WithOnClose(p.onClose)}
 	if pluginName != "" {
@@ -101,11 +105,15 @@ func Run(log *slog.Logger, args []string) error {
 	case <-ctx.Done():
 		log.Info("shutdown signal received, stopping plugin")
 		close(stopCleanup)
+		p.closeOnce.Do(func() { close(p.stopCh) })
+		p.verifyWG.Wait()
 		_ = srv.Shutdown(context.Background())
 		p.stub.Stop()
 		return nil
 	case err := <-errCh:
 		close(stopCleanup)
+		p.closeOnce.Do(func() { close(p.stopCh) })
+		p.verifyWG.Wait()
 		_ = srv.Shutdown(context.Background())
 		if err != nil {
 			return fmt.Errorf("plugin exited: %w", err)
@@ -114,39 +122,68 @@ func Run(log *slog.Logger, args []string) error {
 	}
 }
 
-// PostCreateContainer fires after the runtime creates the container, which is
-// after the OCI CreateRuntime hook has run (or been killed by containerd on
-// timeout). We use it to verify the hook actually completed by inspecting the
-// breadcrumb files left in the staged dir on the node — containerd SIGKILLs
-// timed-out hooks, so they can't report failure themselves.
+// PostCreateContainer logs container creation events. Note: in containerd's
+// NRI integration this fires during the CRI Create phase, BEFORE the runtime
+// has executed the OCI CreateRuntime hook — so it cannot be used to verify
+// the hook ran. Verification happens in PostStartContainer.
 func (p *Plugin) PostCreateContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) error {
-	cid := shortID(ctr)
-	base := []any{
+	p.log.Debug("post create container",
 		"namespace", pod.GetNamespace(),
 		"pod", pod.GetName(),
 		"container", ctr.GetName(),
-		"container_id", cid,
-	}
-	p.log.Debug("post create container", base...)
+		"container_id", shortID(ctr),
+	)
+	return nil
+}
 
-	key, err := containerCAKey(ctr)
-	if err != nil || key == "" {
-		return nil
-	}
-	if _, tracked := p.tracked.Load(key); !tracked {
-		return nil // skipped or not opted in
+// verifyHookCompletion runs in a goroutine after CreateContainer. It waits up
+// to hookTimeoutSec (the deadline at which containerd SIGKILLs the hook),
+// then briefly polls for hook.done to absorb any small scheduling lag. If the
+// hook didn't finish, it logs a warning and increments HookIncompleteTotal.
+//
+// We use a timer rather than NRI lifecycle events because NRI's
+// PostCreateContainer fires before the runtime has run hooks, and
+// PostStartContainer never fires when the hook fails (the container never
+// reaches "started"). A timer is the only event source that works for both
+// success and failure cases.
+func (p *Plugin) verifyHookCompletion(key string, base []any) {
+	defer p.verifyWG.Done()
+
+	timeout := time.Duration(hookTimeoutSec()) * time.Second
+	select {
+	case <-p.stopCh:
+		return
+	case <-time.After(timeout):
 	}
 
 	dir := filepath.Join(dynamicCARoot(), key)
-	if _, err := os.Stat(filepath.Join(dir, config.BreadcrumbDone)); err == nil {
-		return nil
+	donePath := filepath.Join(dir, config.BreadcrumbDone)
+
+	// Poll briefly to cover scheduling lag between containerd kicking off the
+	// hook and the hook process writing its breadcrumb. 5×100ms is plenty —
+	// the hook either wrote hook.done before its deadline or it didn't.
+	for i := 0; i < 5; i++ {
+		if _, err := os.Stat(donePath); err == nil {
+			return // hook completed
+		}
+		select {
+		case <-p.stopCh:
+			return
+		case <-time.After(100 * time.Millisecond):
+		}
+	}
+
+	// Container may have been removed in the meantime — skip silently.
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		return
 	}
 
 	if _, err := os.Stat(filepath.Join(dir, config.BreadcrumbStarted)); err != nil {
-		p.log.Warn("hook did not run for tracked container — check containerd OCI hook handling and journalctl -u containerd",
+		p.log.Warn("hook did not run for tracked container — "+
+			"verify NRI is enabled and the runtime honours OCI CreateRuntime hooks",
 			append(base, "timeout_sec", hookTimeoutSec())...)
 		p.metrics.HookIncompleteTotal.Inc()
-		return nil
+		return
 	}
 
 	progress := ""
@@ -154,10 +191,9 @@ func (p *Plugin) PostCreateContainer(_ context.Context, pod *api.PodSandbox, ctr
 		progress = strings.TrimSpace(string(b))
 	}
 	p.log.Warn("hook started but did not complete — likely SIGKILLed on timeout; "+
-		"bump CAINJEKT_HOOK_TIMEOUT_SEC or inspect journalctl -u containerd",
+		"bump CAINJEKT_HOOK_TIMEOUT_SEC",
 		append(base, "last_progress", progress, "timeout_sec", hookTimeoutSec())...)
 	p.metrics.HookIncompleteTotal.Inc()
-	return nil
 }
 
 // CreateContainer intercepts container creation to inject CA certificates.
@@ -281,6 +317,11 @@ func (p *Plugin) CreateContainer(
 		Options:     []string{"bind", "ro"},
 	})
 	adjustment.AddHooks(&api.Hooks{CreateRuntime: []*api.Hook{hook}})
+
+	if key != "" {
+		p.verifyWG.Add(1)
+		go p.verifyHookCompletion(key, base)
+	}
 	return adjustment, nil, nil
 }
 

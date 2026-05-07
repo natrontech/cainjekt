@@ -188,10 +188,11 @@ func TestCreateContainerSetsBreadcrumbDirEnv(t *testing.T) {
 	}
 }
 
-func TestPostCreateContainerWarnsOnIncompleteHook(t *testing.T) {
+func TestVerifyHookCompletionWarnsOnIncompleteHook(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv(config.EnvCAFile, writeTempSourceCA(t))
 	t.Setenv(config.EnvDynamicCARoot, root)
+	t.Setenv(config.EnvHookTimeoutSec, "1") // 1s timeout keeps test fast
 
 	var buf strings.Builder
 	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
@@ -216,9 +217,8 @@ func TestPostCreateContainerWarnsOnIncompleteHook(t *testing.T) {
 		t.Fatalf("write progress: %v", err)
 	}
 
-	if err := p.PostCreateContainer(context.Background(), pod, ctr); err != nil {
-		t.Fatalf("PostCreateContainer() error = %v", err)
-	}
+	p.verifyWG.Wait()
+
 	logs := buf.String()
 	if !strings.Contains(logs, "hook started but did not complete") {
 		t.Fatalf("expected incomplete-hook warning, got: %s", logs)
@@ -228,10 +228,11 @@ func TestPostCreateContainerWarnsOnIncompleteHook(t *testing.T) {
 	}
 }
 
-func TestPostCreateContainerSilentWhenHookCompleted(t *testing.T) {
+func TestVerifyHookCompletionSilentWhenHookCompleted(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv(config.EnvCAFile, writeTempSourceCA(t))
 	t.Setenv(config.EnvDynamicCARoot, root)
+	t.Setenv(config.EnvHookTimeoutSec, "1")
 
 	var buf strings.Builder
 	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
@@ -248,17 +249,48 @@ func TestPostCreateContainerSilentWhenHookCompleted(t *testing.T) {
 	}
 
 	dir, _ := containerCADir(root, ctr)
+	// Simulate the hook running and completing successfully.
 	for _, name := range []string{config.BreadcrumbStarted, config.BreadcrumbDone} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte("t"), 0o600); err != nil {
 			t.Fatalf("write %s: %v", name, err)
 		}
 	}
 
-	if err := p.PostCreateContainer(context.Background(), pod, ctr); err != nil {
-		t.Fatalf("PostCreateContainer() error = %v", err)
-	}
+	p.verifyWG.Wait()
+
 	if strings.Contains(buf.String(), "did not complete") || strings.Contains(buf.String(), "did not run") {
 		t.Fatalf("did not expect warning, got: %s", buf.String())
+	}
+}
+
+func TestVerifyHookCompletionSilentWhenContainerRemovedEarly(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv(config.EnvCAFile, writeTempSourceCA(t))
+	t.Setenv(config.EnvDynamicCARoot, root)
+	t.Setenv(config.EnvHookTimeoutSec, "1")
+
+	var buf strings.Builder
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	p := newPlugin(logger)
+	pod := &api.PodSandbox{
+		Namespace:   "default",
+		Name:        "pod-rm",
+		Annotations: map[string]string{config.AnnoEnabled(): "true"},
+	}
+	ctr := &api.Container{Id: "containerd://removed01", Name: "app", Args: []string{"sleep", "1"}}
+
+	if _, _, err := p.CreateContainer(context.Background(), pod, ctr); err != nil {
+		t.Fatalf("CreateContainer() error = %v", err)
+	}
+	// Simulate RemoveContainer firing before verifier wakes up.
+	if err := p.RemoveContainer(context.Background(), pod, ctr); err != nil {
+		t.Fatalf("RemoveContainer() error = %v", err)
+	}
+
+	p.verifyWG.Wait()
+
+	if strings.Contains(buf.String(), "did not complete") || strings.Contains(buf.String(), "did not run") {
+		t.Fatalf("did not expect warning for removed container, got: %s", buf.String())
 	}
 }
 
