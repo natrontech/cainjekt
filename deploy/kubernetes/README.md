@@ -143,7 +143,7 @@ The DaemonSet supports the following environment variables:
 - `CAINJEKT_FAIL_POLICY`: Failure policy, either `fail-open` or `fail-closed` (default: `fail-open`)
 - `CAINJEKT_ANNOTATION_PREFIX`: Annotation prefix for pod opt-in (default: `cainjekt.natron.io`)
 - `CAINJEKT_LOG_LEVEL`: Log level: `debug`, `info`, `warn`, `error` (default: `info`)
-- `CAINJEKT_HOOK_TIMEOUT_SEC`: OCI hook timeout in seconds (default: `5`). Containerd kills the hook if it exceeds this.
+- `CAINJEKT_HOOK_TIMEOUT_SEC`: OCI hook timeout in seconds (default: `20`). Containerd SIGKILLs the hook if it exceeds this. Raise if `update-ca-certificates` runs slowly on the node.
 
 ### Pod Annotations
 

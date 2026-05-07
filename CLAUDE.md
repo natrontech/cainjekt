@@ -79,7 +79,7 @@ make copy-plugin              # Copy binary to kind node
 | `CAINJEKT_ANNOTATION_PREFIX` | `cainjekt.natron.io` | Annotation prefix |
 | `CAINJEKT_FAIL_POLICY` | `fail-open` | Hook failure policy |
 | `CAINJEKT_LOG_LEVEL` | `info` | Log level (debug/info/warn/error) |
-| `CAINJEKT_HOOK_TIMEOUT_SEC` | `5` | OCI hook timeout (containerd kills if exceeded) |
+| `CAINJEKT_HOOK_TIMEOUT_SEC` | `20` | OCI hook timeout in seconds (containerd SIGKILLs the hook if exceeded; raise for slow `update-ca-certificates` runs) |
 | `CAINJEKT_DYNAMIC_CA_ROOT` | `/run/cainjekt/containers` | Per-container CA staging |
 
 Annotations: `<prefix>/enabled`, `<prefix>/processors.include`, `<prefix>/processors.exclude`, `<prefix>/exclude-containers`.

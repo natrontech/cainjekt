@@ -76,8 +76,8 @@ logLevel: "info"
 ## @param metricsPort Port for health/readiness/metrics HTTP server
 metricsPort: 9443
 
-## @param hookTimeoutSeconds OCI hook timeout in seconds (containerd kills the hook after this)
-hookTimeoutSeconds: 5
+## @param hookTimeoutSeconds OCI hook timeout in seconds (containerd SIGKILLs the hook after this). Raise if `update-ca-certificates` runs slowly on the node.
+hookTimeoutSeconds: 20
 
 ## @section DaemonSet parameters
 

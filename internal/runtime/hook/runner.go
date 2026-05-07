@@ -21,6 +21,8 @@ func Run(log *slog.Logger) error {
 		return fmt.Errorf("unknown hook mode: %q", mode)
 	}
 
+	breadcrumbNow(config.BreadcrumbStarted)
+
 	state, err := oci.ReadState(os.Stdin)
 	if err != nil {
 		return err
@@ -91,6 +93,7 @@ func Run(log *slog.Logger) error {
 		"trust_store", factOrEmpty(ctx, hookapi.FactTrustStorePath),
 	)
 
+	breadcrumbNow(config.BreadcrumbDone)
 	return nil
 }
 
@@ -119,6 +122,7 @@ func runProcessors(ctx *hookapi.Context, list []hookapi.Processor) []hookctx.Det
 			})
 			continue
 		}
+		breadcrumb(config.BreadcrumbProgress, d.Processor.Name())
 		err := d.Processor.Apply(ctx)
 		ctx.AddResult(hookapi.ProcessorResult{
 			Name:     d.Processor.Name(),

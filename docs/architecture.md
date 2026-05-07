@@ -192,6 +192,7 @@ The NRI plugin exposes metrics on `:9443/metrics`:
 | `cainjekt_orphans_cleaned_total` | Counter | Orphaned CA dirs cleaned |
 | `cainjekt_processor_detected_total{processor}` | Counter | Per-processor detection count |
 | `cainjekt_processor_applied_total{processor}` | Counter | Per-processor application count |
+| `cainjekt_hook_incomplete_total` | Counter | OCI hooks that did not finish (SIGKILLed on timeout). Alert on sustained increase: `rate(cainjekt_hook_incomplete_total[5m]) > 0` — usually means `CAINJEKT_HOOK_TIMEOUT_SEC` is too low. |
 
 Plus standard Go runtime and process metrics via `prometheus/client_golang`.
 
