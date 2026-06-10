@@ -239,6 +239,18 @@ helm upgrade cainjekt oci://ghcr.io/natrontech/charts/cainjekt \
 
 Common causes: invalid CA bundle (check PEM format), NRI socket issues (check containerd version), insufficient permissions.
 
+### Injection suddenly stops for whole namespaces (namespace-label opt-in)
+
+If pods that opt in via a **namespace** label (not a pod annotation/label) stop
+being injected — typically a fixed time after a cainjekt pod (re)start — check
+`cainjekt_ns_lookup_errors_total`. A nonzero value means the Kubernetes API
+lookup for the namespace label is failing, most often because the service
+account token expired. cainjekt re-reads the rotated token automatically, so a
+sustained error rate points at RBAC or API reachability instead. Pods that opt in
+via a **pod** annotation or label are unaffected (no API call), so moving the
+opt-in to the pod template is a robust workaround for environments with very
+short token lifetimes.
+
 ## Limitations
 
 | Scenario | Works? | Details |
