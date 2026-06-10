@@ -23,6 +23,7 @@ type Metrics struct {
 	CABundleCertCount    prometheus.Gauge
 	NRIAvailable         *prometheus.GaugeVec
 	HookIncompleteTotal  prometheus.Counter
+	NsLookupErrors       prometheus.Counter
 }
 
 func newMetrics() *Metrics {
@@ -80,6 +81,10 @@ func newMetrics() *Metrics {
 			Name: "cainjekt_hook_incomplete_total",
 			Help: "OCI hooks that did not finish (likely SIGKILLed by containerd on timeout).",
 		}),
+		NsLookupErrors: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "cainjekt_ns_lookup_errors_total",
+			Help: "Namespace label lookup failures (e.g. expired SA token); may cause opt-in pods to be skipped.",
+		}),
 	}
 
 	reg.MustRegister(
@@ -95,6 +100,7 @@ func newMetrics() *Metrics {
 		m.CABundleCertCount,
 		m.NRIAvailable,
 		m.HookIncompleteTotal,
+		m.NsLookupErrors,
 	)
 
 	return m

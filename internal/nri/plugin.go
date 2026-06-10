@@ -54,7 +54,7 @@ func Run(log *slog.Logger, args []string) error {
 	}
 
 	metrics := newMetrics()
-	nsCache := newNSLabelCache()
+	nsCache := newNSLabelCache(log, metrics)
 	p := &Plugin{log: log, metrics: metrics, nsCache: nsCache, stopCh: make(chan struct{})}
 
 	opts := []stub.Option{stub.WithOnClose(p.onClose)}

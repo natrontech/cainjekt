@@ -193,8 +193,16 @@ The NRI plugin exposes metrics on `:9443/metrics`:
 | `cainjekt_processor_detected_total{processor}` | Counter | Per-processor detection count |
 | `cainjekt_processor_applied_total{processor}` | Counter | Per-processor application count |
 | `cainjekt_hook_incomplete_total` | Counter | OCI hooks that did not finish (SIGKILLed on timeout). Alert on sustained increase: `rate(cainjekt_hook_incomplete_total[5m]) > 0` — usually means `CAINJEKT_HOOK_TIMEOUT_SEC` is too low. |
+| `cainjekt_ns_lookup_errors_total` | Counter | Namespace label lookups that failed (expired service account token, API unreachable). Alert on any increase: `rate(cainjekt_ns_lookup_errors_total[5m]) > 0` — namespace-label opt-in pods are being silently skipped. |
 
 Plus standard Go runtime and process metrics via `prometheus/client_golang`.
+
+> **Namespace-label opt-in depends on the service account token.** The plugin
+> re-reads the projected token from disk (the kubelet rotates it before expiry),
+> so it survives the short-lived bound tokens that some clusters (e.g. AKS) issue.
+> If `cainjekt_ns_lookup_errors_total` climbs, the API lookup is failing and
+> namespace-label opt-in stops working until it recovers — pod-annotation and
+> pod-label opt-in are unaffected because they need no API call.
 
 ### Status File
 

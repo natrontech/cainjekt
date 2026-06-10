@@ -16,7 +16,8 @@ func newPlugin(log *slog.Logger) *Plugin {
 	if log == nil {
 		log = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
-	return &Plugin{log: log, metrics: newMetrics(), nsCache: newNSLabelCache(), stopCh: make(chan struct{})}
+	m := newMetrics()
+	return &Plugin{log: log, metrics: m, nsCache: newNSLabelCache(log, m), stopCh: make(chan struct{})}
 }
 
 // injectDecision explains why a pod was (or wasn't) selected for injection.

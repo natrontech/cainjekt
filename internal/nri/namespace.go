@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -13,14 +14,30 @@ import (
 	"time"
 )
 
+const defaultTokenPath = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+
 // nsLabelCache caches namespace labels with a TTL to avoid excessive API calls.
 type nsLabelCache struct {
 	mu      sync.RWMutex
 	entries map[string]nsEntry
 	ttl     time.Duration
 	client  *http.Client // nil if K8s API is not available
-	token   string
 	apiURL  string
+
+	// Service account token handling. The token is re-read from tokenPath (with a
+	// short TTL) rather than cached for the process lifetime. The kubelet rotates
+	// the projected token file before expiry, and bound tokens can expire in as
+	// little as one hour — reading it once at startup makes namespace-label opt-in
+	// silently fail after the first expiry (the lookup 401s and the pod is treated
+	// as not opted in). See [[sa-token-not-refreshed-bug]].
+	tokenMu      sync.Mutex
+	tokenPath    string
+	tokenTTL     time.Duration
+	token        string
+	tokenFetched time.Time
+
+	log     *slog.Logger
+	metrics *Metrics
 }
 
 type nsEntry struct {
@@ -28,18 +45,23 @@ type nsEntry struct {
 	fetched time.Time
 }
 
-func newNSLabelCache() *nsLabelCache {
+func newNSLabelCache(log *slog.Logger, metrics *Metrics) *nsLabelCache {
 	cache := &nsLabelCache{
-		entries: map[string]nsEntry{},
-		ttl:     1 * time.Minute,
-		apiURL:  "https://kubernetes.default.svc/api/v1/namespaces/",
+		entries:   map[string]nsEntry{},
+		ttl:       1 * time.Minute,
+		apiURL:    "https://kubernetes.default.svc/api/v1/namespaces/",
+		tokenPath: defaultTokenPath,
+		tokenTTL:  30 * time.Second,
+		log:       log,
+		metrics:   metrics,
 	}
 
-	token, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/token")
-	if err != nil {
+	// Require the token to exist at startup; if it does not, the API client stays
+	// nil and namespace-label lookups are disabled (pods can still opt in via pod
+	// annotation/label). The token value itself is read fresh on use, not cached.
+	if _, err := os.ReadFile(cache.tokenPath); err != nil {
 		return cache // client stays nil — namespace lookups disabled
 	}
-	cache.token = strings.TrimSpace(string(token))
 
 	tlsCfg, err := tlsConfigFromServiceAccount()
 	if err != nil {
@@ -53,26 +75,57 @@ func newNSLabelCache() *nsLabelCache {
 	return cache
 }
 
-// getLabel returns the value of a label on the given namespace.
+// currentToken returns the service account token, re-reading it from disk when the
+// cached copy is older than tokenTTL. The kubelet keeps the file current; on a
+// transient read failure (e.g. mid-rotation) we keep using the last-known token.
+func (c *nsLabelCache) currentToken() string {
+	c.tokenMu.Lock()
+	defer c.tokenMu.Unlock()
+
+	if c.token != "" && time.Since(c.tokenFetched) < c.tokenTTL {
+		return c.token
+	}
+
+	b, err := os.ReadFile(c.tokenPath)
+	if err != nil {
+		if c.token == "" && c.log != nil {
+			c.log.Warn("failed to read service account token", "path", c.tokenPath, "error", err)
+		}
+		return c.token // best effort: keep using the last-known token
+	}
+
+	c.token = strings.TrimSpace(string(b))
+	c.tokenFetched = time.Now()
+	return c.token
+}
+
+// getLabel returns the value of a label on the given namespace. A failed lookup
+// (expired token, API unreachable) is surfaced via a Warn log and the
+// NsLookupErrors metric rather than silently masquerading as "not opted in".
 func (c *nsLabelCache) getLabel(namespace, key string) (string, bool) {
 	if c.client == nil {
 		return "", false
 	}
 
 	labels, ok := c.getCachedLabels(namespace)
-	if ok {
-		v, found := labels[key]
-		return v, found
+	if !ok {
+		var err error
+		labels, err = c.fetchLabels(namespace)
+		if err != nil {
+			if c.metrics != nil {
+				c.metrics.NsLookupErrors.Inc()
+			}
+			if c.log != nil {
+				c.log.Warn("namespace label lookup failed; treating pod as not opted in "+
+					"(check service account token expiry, RBAC, and API reachability)",
+					"namespace", namespace, "error", err)
+			}
+			return "", false
+		}
+		c.mu.Lock()
+		c.entries[namespace] = nsEntry{labels: labels, fetched: time.Now()}
+		c.mu.Unlock()
 	}
-
-	labels, err := c.fetchLabels(namespace)
-	if err != nil {
-		return "", false
-	}
-
-	c.mu.Lock()
-	c.entries[namespace] = nsEntry{labels: labels, fetched: time.Now()}
-	c.mu.Unlock()
 
 	v, found := labels[key]
 	return v, found
@@ -92,7 +145,9 @@ func (c *nsLabelCache) fetchLabels(namespace string) (map[string]string, error) 
 	if c.client == nil {
 		return nil, fmt.Errorf("K8s API client not available")
 	}
-	if c.token == "" {
+
+	token := c.currentToken()
+	if token == "" {
 		return nil, fmt.Errorf("no service account token")
 	}
 
@@ -100,7 +155,7 @@ func (c *nsLabelCache) fetchLabels(namespace string) (map[string]string, error) 
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.token)
+	req.Header.Set("Authorization", "Bearer "+token)
 
 	resp, err := c.client.Do(req)
 	if err != nil {
@@ -108,6 +163,10 @@ func (c *nsLabelCache) fetchLabels(namespace string) (map[string]string, error) 
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	if resp.StatusCode == http.StatusUnauthorized {
+		return nil, fmt.Errorf("API returned 401 for namespace %s "+
+			"(service account token expired or invalid)", namespace)
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("API returned %d for namespace %s", resp.StatusCode, namespace)
 	}
