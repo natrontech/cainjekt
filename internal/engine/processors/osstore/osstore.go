@@ -16,7 +16,12 @@ import (
 	"github.com/natrontech/cainjekt/pkg/fsx"
 )
 
-const individualCAFileName = "cainjekt.crt"
+const (
+	individualCAFileName = "cainjekt.crt"
+	// Staged in the per-container dynamic CA dir when the rootfs store can't be
+	// merged in place (read-only rootfs).
+	mergedCAFileName = "ca-bundle-merged.pem"
+)
 
 type processor struct {
 	name       string
@@ -155,6 +160,15 @@ func (p *processor) Apply(ctx *hookapi.Context) error {
 		// Use the dynamic CA file directly — it's on a host-mounted writable path.
 		if ctx.CAFile != "" {
 			ctx.Facts.Set(hookapi.FactIndividualCAPath, ctx.CAFile)
+			// The store can't be merged in place; stage the merged bundle beside
+			// the dynamic CA file instead.
+			mergedPath, err := stageMergedCA(targetHost, filepath.Dir(ctx.CAFile), orgCA)
+			if err != nil {
+				return err
+			}
+			if mergedPath != "" {
+				ctx.Facts.Set(hookapi.FactMergedCAPath, mergedPath)
+			}
 		}
 		return nil
 	}
@@ -207,6 +221,8 @@ func (p *processor) Apply(ctx *hookapi.Context) error {
 	ctx.Facts.Set(hookapi.FactTrustStorePath, targetContainer)
 	ctx.Facts.Set(hookapi.FactTrustStoreKind, "bundle")
 	ctx.Facts.Set(hookapi.FactDistro, p.distro)
+	// The in-place merged store doubles as the bundle for trust-replacing env vars.
+	ctx.Facts.Set(hookapi.FactMergedCAPath, targetContainer)
 	if individualCAPath != "" {
 		ctx.Facts.Set(hookapi.FactIndividualCAPath, individualCAPath)
 	}
@@ -314,6 +330,32 @@ func normalizeOSReleaseValue(v string) string {
 		v = v[1 : len(v)-1]
 	}
 	return strings.TrimSpace(v)
+}
+
+// stageMergedCA writes <system store + org CA> into destDir (the writable
+// per-container dynamic CA dir) and returns the staged path. Returns "" when the
+// rootfs has no store to merge with — callers then fall back to the individual CA.
+func stageMergedCA(storeHostPath, destDir string, orgCA []byte) (string, error) {
+	current, err := os.ReadFile(storeHostPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return "", nil
+		}
+		return "", fmt.Errorf("failed to read trust store %s: %w", storeHostPath, err)
+	}
+	merged, err := certs.MergePEM(current, orgCA)
+	if err != nil {
+		return "", err
+	}
+	target := filepath.Join(destDir, mergedCAFileName)
+	if err := fsx.AtomicWrite(target, merged.Merged, fsx.WriteOptions{
+		FallbackMode:  0o644,
+		RefuseSymlink: true,
+		PreserveOwner: true,
+	}); err != nil {
+		return "", fmt.Errorf("failed to write merged CA bundle %s: %w", target, err)
+	}
+	return target, nil
 }
 
 func writeIndividualCA(rootfs, anchorDir string, content []byte) (string, error) {

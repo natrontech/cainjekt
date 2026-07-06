@@ -53,6 +53,8 @@ func (p *processor) ApplyWrapper(ctx *hookapi.Context) error {
 	if ctx == nil || ctx.Facts == nil {
 		return nil
 	}
+	// NODE_EXTRA_CA_CERTS is additive, so the bare org CA is correct here — do not
+	// switch this to PreferredCABundlePath.
 	individualCAPath, ok := ctx.Facts.Get(hookapi.FactIndividualCAPath)
 	if !ok {
 		return nil

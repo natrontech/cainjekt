@@ -21,11 +21,13 @@ func TestWrapperIntegration_PythonEnvVarsAreApplied(t *testing.T) {
 	requireCommand(t, "sh")
 
 	statePath := filepath.Join(t.TempDir(), "hook-context.json")
-	want := "/usr/local/share/ca-certificates/cainjekt.crt"
+	// Merged bundle must win over the individual org CA.
+	want := "/etc/ssl/certs/ca-certificates.crt"
 	state := hookctx.State{
 		Context: hookctx.PersistedContext{
 			Facts: map[string]string{
-				string(hookapi.FactIndividualCAPath): want,
+				string(hookapi.FactIndividualCAPath): "/usr/local/share/ca-certificates/cainjekt.crt",
+				string(hookapi.FactMergedCAPath):     want,
 			},
 		},
 		Detected: []hookctx.DetectedProcessor{
@@ -44,6 +46,8 @@ func TestWrapperIntegration_PythonEnvVarsAreApplied(t *testing.T) {
 		"env",
 		config.EnvWrapperMode+"=1",
 		config.EnvHookContextFile+"="+statePath,
+		// Wrapper INFO logs land in the captured output otherwise.
+		config.EnvLogLevel+"=error",
 		"SSL_CERT_FILE=/tmp/old.crt",
 		"REQUESTS_CA_BUNDLE=/tmp/old.crt",
 		"go", "run", "./cmd/cainjekt", "sh", "-c", "printf '%s|%s' \"${SSL_CERT_FILE:-}\" \"${REQUESTS_CA_BUNDLE:-}\"",

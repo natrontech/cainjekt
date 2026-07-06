@@ -8,7 +8,10 @@ import (
 	"github.com/natrontech/cainjekt/internal/testutil"
 )
 
-const testIndividualCAPath = "/usr/local/share/ca-certificates/cainjekt.crt"
+const (
+	testIndividualCAPath = "/usr/local/share/ca-certificates/cainjekt.crt"
+	testMergedCAPath     = "/etc/ssl/certs/ca-certificates.crt"
+)
 
 func TestDetectApplicableWhenJavaExists(t *testing.T) {
 	t.Parallel()
@@ -92,7 +95,28 @@ func TestApplyWrapperAppendsToExistingJavaToolOptions(t *testing.T) {
 	}
 }
 
-func TestApplyWrapperNoopWithoutIndividualCAPath(t *testing.T) {
+func TestApplyWrapperPrefersMergedBundle(t *testing.T) {
+	t.Parallel()
+
+	ctx := &hookapi.Context{
+		Env:   []string{"PATH=/usr/bin"},
+		Facts: hookapi.NewMapFactStore(),
+	}
+	ctx.Facts.Set(hookapi.FactIndividualCAPath, testIndividualCAPath)
+	ctx.Facts.Set(hookapi.FactMergedCAPath, testMergedCAPath)
+
+	p := New().(*processor)
+	if err := p.ApplyWrapper(ctx); err != nil {
+		t.Fatalf("ApplyWrapper() error = %v", err)
+	}
+
+	got := testutil.EnvValue(ctx.Env, envJavaToolOptions)
+	if !strings.Contains(got, "-Djavax.net.ssl.trustStore="+testMergedCAPath) {
+		t.Fatalf("env %q should use merged bundle: got=%q", envJavaToolOptions, got)
+	}
+}
+
+func TestApplyWrapperNoopWithoutCAPathFacts(t *testing.T) {
 	t.Parallel()
 
 	ctx := &hookapi.Context{

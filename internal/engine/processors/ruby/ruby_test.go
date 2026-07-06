@@ -7,7 +7,10 @@ import (
 	"github.com/natrontech/cainjekt/internal/testutil"
 )
 
-const testIndividualCAPath = "/usr/local/share/ca-certificates/cainjekt.crt"
+const (
+	testIndividualCAPath = "/usr/local/share/ca-certificates/cainjekt.crt"
+	testMergedCAPath     = "/etc/ssl/certs/ca-certificates.crt"
+)
 
 func TestDetectApplicableWhenRubyExists(t *testing.T) {
 	t.Parallel()
@@ -42,6 +45,24 @@ func TestApplyWrapperSetsSSLCertFile(t *testing.T) {
 	}
 	if got := testutil.EnvValue(ctx.Env, envSSLCertFile); got != testIndividualCAPath {
 		t.Fatalf("env %q = %q, want %q", envSSLCertFile, got, testIndividualCAPath)
+	}
+}
+
+func TestApplyWrapperPrefersMergedBundle(t *testing.T) {
+	t.Parallel()
+	ctx := &hookapi.Context{
+		Env:   []string{"PATH=/usr/bin"},
+		Facts: hookapi.NewMapFactStore(),
+	}
+	ctx.Facts.Set(hookapi.FactIndividualCAPath, testIndividualCAPath)
+	ctx.Facts.Set(hookapi.FactMergedCAPath, testMergedCAPath)
+
+	p := New().(*processor)
+	if err := p.ApplyWrapper(ctx); err != nil {
+		t.Fatalf("ApplyWrapper() error = %v", err)
+	}
+	if got := testutil.EnvValue(ctx.Env, envSSLCertFile); got != testMergedCAPath {
+		t.Fatalf("env %q = %q, want merged bundle %q", envSSLCertFile, got, testMergedCAPath)
 	}
 }
 

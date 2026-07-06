@@ -2,8 +2,6 @@
 package java
 
 import (
-	"strings"
-
 	hookapi "github.com/natrontech/cainjekt/internal/engine/api"
 	"github.com/natrontech/cainjekt/internal/util/containerfs"
 	"github.com/natrontech/cainjekt/internal/util/envutil"
@@ -55,22 +53,18 @@ func (p *processor) Apply(_ *hookapi.Context) error {
 }
 
 func (p *processor) ApplyWrapper(ctx *hookapi.Context) error {
-	if ctx == nil || ctx.Facts == nil {
+	if ctx == nil {
 		return nil
 	}
-	individualCAPath, ok := ctx.Facts.Get(hookapi.FactIndividualCAPath)
-	if !ok {
-		return nil
-	}
-	individualCAPath = strings.TrimSpace(individualCAPath)
-	if individualCAPath == "" {
+	caPath := hookapi.PreferredCABundlePath(ctx.Facts)
+	if caPath == "" {
 		return nil
 	}
 
 	// JAVA_TOOL_OPTIONS is picked up by all JVM invocations.
 	// We append the trust store flags so existing JAVA_TOOL_OPTIONS values are preserved.
 	existing := envutil.GetValue(ctx.Env, envJavaToolOptions)
-	trustStoreFlags := "-Djavax.net.ssl.trustStore=" + individualCAPath +
+	trustStoreFlags := "-Djavax.net.ssl.trustStore=" + caPath +
 		" -Djavax.net.ssl.trustStoreType=PEM"
 	if existing != "" {
 		ctx.Env = envutil.Upsert(ctx.Env, envJavaToolOptions, existing+" "+trustStoreFlags)
