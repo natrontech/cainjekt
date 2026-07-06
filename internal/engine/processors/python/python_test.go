@@ -7,7 +7,10 @@ import (
 	"github.com/natrontech/cainjekt/internal/testutil"
 )
 
-const testIndividualCAPath = "/usr/local/share/ca-certificates/cainjekt.crt"
+const (
+	testIndividualCAPath = "/usr/local/share/ca-certificates/cainjekt.crt"
+	testMergedCAPath     = "/etc/ssl/certs/ca-certificates.crt"
+)
 
 func TestDetectApplicableWhenPythonExists(t *testing.T) {
 	t.Parallel()
@@ -45,7 +48,30 @@ func TestDetectNotApplicableWhenContextIsNil(t *testing.T) {
 	}
 }
 
-func TestApplyWrapperSetsPythonEnvVars(t *testing.T) {
+func TestApplyWrapperPrefersMergedBundle(t *testing.T) {
+	t.Parallel()
+
+	ctx := &hookapi.Context{
+		Env:   []string{"PATH=/usr/bin"},
+		Facts: hookapi.NewMapFactStore(),
+	}
+	ctx.Facts.Set(hookapi.FactIndividualCAPath, testIndividualCAPath)
+	ctx.Facts.Set(hookapi.FactMergedCAPath, testMergedCAPath)
+
+	p := New().(*processor)
+	if err := p.ApplyWrapper(ctx); err != nil {
+		t.Fatalf("ApplyWrapper() error = %v", err)
+	}
+
+	if got := testutil.EnvValue(ctx.Env, envSSLCAFile); got != testMergedCAPath {
+		t.Fatalf("env %q mismatch: got=%q want merged bundle", envSSLCAFile, got)
+	}
+	if got := testutil.EnvValue(ctx.Env, envRequestsCABundle); got != testMergedCAPath {
+		t.Fatalf("env %q mismatch: got=%q want merged bundle", envRequestsCABundle, got)
+	}
+}
+
+func TestApplyWrapperFallsBackToIndividualCA(t *testing.T) {
 	t.Parallel()
 
 	ctx := &hookapi.Context{
@@ -92,7 +118,7 @@ func TestApplyWrapperOverwritesExistingPythonEnvVars(t *testing.T) {
 	}
 }
 
-func TestApplyWrapperNoopWithoutIndividualCAPath(t *testing.T) {
+func TestApplyWrapperNoopWithoutCAPathFacts(t *testing.T) {
 	t.Parallel()
 
 	ctx := &hookapi.Context{

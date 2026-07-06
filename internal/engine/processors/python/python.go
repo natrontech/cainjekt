@@ -2,8 +2,6 @@
 package python
 
 import (
-	"strings"
-
 	hookapi "github.com/natrontech/cainjekt/internal/engine/api"
 	"github.com/natrontech/cainjekt/internal/util/containerfs"
 	"github.com/natrontech/cainjekt/internal/util/envutil"
@@ -53,19 +51,15 @@ func (p *processor) Apply(_ *hookapi.Context) error {
 }
 
 func (p *processor) ApplyWrapper(ctx *hookapi.Context) error {
-	if ctx == nil || ctx.Facts == nil {
+	if ctx == nil {
 		return nil
 	}
-	individualCAPath, ok := ctx.Facts.Get(hookapi.FactIndividualCAPath)
-	if !ok {
+	caPath := hookapi.PreferredCABundlePath(ctx.Facts)
+	if caPath == "" {
 		return nil
 	}
-	individualCAPath = strings.TrimSpace(individualCAPath)
-	if individualCAPath == "" {
-		return nil
-	}
-	ctx.Env = envutil.Upsert(ctx.Env, envSSLCAFile, individualCAPath)
-	ctx.Env = envutil.Upsert(ctx.Env, envRequestsCABundle, individualCAPath)
+	ctx.Env = envutil.Upsert(ctx.Env, envSSLCAFile, caPath)
+	ctx.Env = envutil.Upsert(ctx.Env, envRequestsCABundle, caPath)
 	return nil
 }
 

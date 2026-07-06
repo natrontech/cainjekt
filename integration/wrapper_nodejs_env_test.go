@@ -44,6 +44,8 @@ func TestWrapperIntegration_NodeExtraCACertsIsApplied(t *testing.T) {
 		"env",
 		config.EnvWrapperMode+"=1",
 		config.EnvHookContextFile+"="+statePath,
+		// Wrapper INFO logs land in the captured output otherwise.
+		config.EnvLogLevel+"=error",
 		"NODE_EXTRA_CA_CERTS=/tmp/old.crt",
 		"go", "run", "./cmd/cainjekt", "sh", "-c", "printf %s \"${NODE_EXTRA_CA_CERTS:-}\"",
 	)

@@ -1,6 +1,7 @@
 package osstore
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -232,6 +233,73 @@ func TestApplySetsIndividualCAPathFact(t *testing.T) {
 	want := "/usr/local/share/ca-certificates/" + individualCAFileName
 	if got != want {
 		t.Fatalf("individual CA path mismatch: got=%q want=%q", got, want)
+	}
+
+	gotMerged, ok := ctx.Facts.Get(hookapi.FactMergedCAPath)
+	if !ok {
+		t.Fatalf("missing fact %q", hookapi.FactMergedCAPath)
+	}
+	if gotMerged != "/etc/ssl/certs/ca-certificates.crt" {
+		t.Fatalf("merged CA path mismatch: got=%q", gotMerged)
+	}
+}
+
+func TestApplyReadOnlyRootfsStagesMergedBundle(t *testing.T) {
+	t.Parallel()
+
+	rootfs := t.TempDir()
+	writeOSRelease(t, rootfs, "ID=ubuntu\nID_LIKE=debian\n")
+	storeCert := mustCreateTestCertPEM(t)
+	storePath := filepath.Join(rootfs, "etc", "ssl", "certs", "ca-certificates.crt")
+	if err := os.MkdirAll(filepath.Dir(storePath), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(storePath, storeCert, 0o644); err != nil {
+		t.Fatalf("WriteFile(%q): %v", storePath, err)
+	}
+
+	dynamicDir := t.TempDir()
+	orgCert := mustCreateTestCertPEM(t)
+	caPath := filepath.Join(dynamicDir, "ca-bundle.pem")
+	if err := os.WriteFile(caPath, orgCert, 0o644); err != nil {
+		t.Fatalf("WriteFile(%q): %v", caPath, err)
+	}
+
+	// Make the rootfs read-only so Apply takes the RO branch.
+	if err := os.Chmod(rootfs, 0o555); err != nil {
+		t.Fatalf("Chmod: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(rootfs, 0o755) })
+
+	ctx := &hookapi.Context{
+		Rootfs: rootfs,
+		CAFile: caPath,
+		Facts:  hookapi.NewMapFactStore(),
+	}
+	if err := NewDebian().Apply(ctx); err != nil {
+		t.Fatalf("Apply() error = %v", err)
+	}
+
+	if v, _ := ctx.Facts.Get(hookapi.FactRootfsReadOnly); v != "true" {
+		t.Fatalf("expected read-only rootfs fact, got %q", v)
+	}
+	gotMerged, ok := ctx.Facts.Get(hookapi.FactMergedCAPath)
+	if !ok {
+		t.Fatalf("missing fact %q", hookapi.FactMergedCAPath)
+	}
+	wantMerged := filepath.Join(dynamicDir, mergedCAFileName)
+	if gotMerged != wantMerged {
+		t.Fatalf("merged CA path mismatch: got=%q want=%q", gotMerged, wantMerged)
+	}
+	content, err := os.ReadFile(gotMerged)
+	if err != nil {
+		t.Fatalf("ReadFile(%q): %v", gotMerged, err)
+	}
+	if !bytes.Contains(content, bytes.TrimSpace(storeCert)) || !bytes.Contains(content, bytes.TrimSpace(orgCert)) {
+		t.Fatalf("merged bundle must contain both the system store and the org CA")
+	}
+	if v, _ := ctx.Facts.Get(hookapi.FactIndividualCAPath); v != caPath {
+		t.Fatalf("individual CA path mismatch: got=%q want=%q", v, caPath)
 	}
 }
 

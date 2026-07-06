@@ -1,6 +1,8 @@
 // Package api defines the processor interfaces and types for cainjekt's engine.
 package api
 
+import "strings"
+
 // FactKey identifies a piece of detection metadata stored during processing.
 type FactKey string
 
@@ -10,8 +12,28 @@ const (
 	FactTrustStoreKind   FactKey = "trust_store_kind"
 	FactDistro           FactKey = "distro"
 	FactIndividualCAPath FactKey = "individual_ca_path"
+	FactMergedCAPath     FactKey = "merged_ca_path"
 	FactRootfsReadOnly   FactKey = "rootfs_read_only"
 )
+
+// PreferredCABundlePath returns the bundle that trust-REPLACING consumers
+// (SSL_CERT_FILE, REQUESTS_CA_BUNDLE, JVM trustStore) should point at: the merged
+// bundle (system roots + org CA) when one was staged, else the individual org CA
+// as a degraded fallback. Pointing such consumers at the bare org CA drops the
+// system roots and breaks all public TLS. Additive consumers (NODE_EXTRA_CA_CERTS)
+// should keep using FactIndividualCAPath.
+func PreferredCABundlePath(facts FactStore) string {
+	if facts == nil {
+		return ""
+	}
+	if v, ok := facts.Get(FactMergedCAPath); ok {
+		if v = strings.TrimSpace(v); v != "" {
+			return v
+		}
+	}
+	v, _ := facts.Get(FactIndividualCAPath)
+	return strings.TrimSpace(v)
+}
 
 // DetectResult reports whether a processor is applicable to a container.
 type DetectResult struct {
