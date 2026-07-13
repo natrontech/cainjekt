@@ -11,17 +11,13 @@ import (
 	"path"
 	"strings"
 
+	"github.com/natrontech/cainjekt/internal/config"
 	hookapi "github.com/natrontech/cainjekt/internal/engine/api"
 	"github.com/natrontech/cainjekt/internal/util/containerfs"
 	"github.com/natrontech/cainjekt/pkg/certs"
 )
 
-const (
-	individualCAFileName = "cainjekt.crt"
-	// Staged in the per-container dynamic CA dir when the rootfs store can't be
-	// merged in place (read-only rootfs).
-	mergedCAFileName = "ca-bundle-merged.pem"
-)
+const individualCAFileName = "cainjekt.crt"
 
 type processor struct {
 	name       string
@@ -157,18 +153,16 @@ func (p *processor) Apply(ctx *hookapi.Context) error {
 		ctx.Facts.Set(hookapi.FactRootfsReadOnly, "true")
 		ctx.Facts.Set(hookapi.FactTrustStorePath, target)
 		ctx.Facts.Set(hookapi.FactDistro, p.distro)
-		// Use the dynamic CA file directly — it's on a host-mounted writable path.
+		// The store can't be merged in place; stage the merged bundle in the dynamic
+		// CA dir instead. The facts must name the paths as the *container* sees them
+		// (the dir is bind-mounted at config.ContainerCADir), not the host paths —
+		// env vars pointing at /run/cainjekt/... resolve to nothing inside.
 		if ctx.CAFile != "" {
-			ctx.Facts.Set(hookapi.FactIndividualCAPath, ctx.CAFile)
-			// The store can't be merged in place; stage the merged bundle beside
-			// the dynamic CA file instead.
-			mergedPath, err := stageMergedCA(ctx, target, orgCA)
-			if err != nil {
+			ctx.Facts.Set(hookapi.FactIndividualCAPath, config.ContainerOrgCA)
+			if err := stageMergedCA(ctx, target, orgCA); err != nil {
 				return err
 			}
-			if mergedPath != "" {
-				ctx.Facts.Set(hookapi.FactMergedCAPath, mergedPath)
-			}
+			ctx.Facts.Set(hookapi.FactMergedCAPath, config.ContainerMergedCA)
 		}
 		return nil
 	}
@@ -198,6 +192,16 @@ func (p *processor) Apply(ctx *hookapi.Context) error {
 	individualCAPath, err := writeIndividualCA(ctx.Rootfs, p.anchorDir, orgCA)
 	if err != nil {
 		return err
+	}
+
+	// Refine the bundle the container spec's trust env vars point at (seeded by the NRI
+	// plugin with this image's roots) to the container's own store + the org CA. The
+	// wrapper keeps using the in-place store below, so entrypoint processes are
+	// unaffected; this is what processes started via exec resolve to.
+	if ctx.CAFile != "" {
+		if err := stageMergedCA(ctx, target, orgCA); err != nil {
+			return err
+		}
 	}
 
 	ctx.Facts.Set(hookapi.FactTrustStorePath, target)
@@ -293,22 +297,25 @@ func normalizeOSReleaseValue(v string) string {
 	return strings.TrimSpace(v)
 }
 
-// stageMergedCA writes <system store + org CA> into the per-container staging
-// dir on the host and returns the staged path. Returns "" when the rootfs has no
-// store to merge with — callers then fall back to the individual CA.
-func stageMergedCA(ctx *hookapi.Context, store string, orgCA []byte) (string, error) {
+// stageMergedCA writes <container's own store + org CA> into the per-container dynamic
+// CA dir, which the NRI plugin bind-mounts at config.ContainerCADir. This is the bundle
+// the spec's trust env vars resolve to, so it is what processes started via exec use.
+// The plugin seeds it with this image's roots; here we refine it with the container's
+// actual store. No-op when the rootfs has no store to merge with — the seed then stands.
+func stageMergedCA(ctx *hookapi.Context, store string, orgCA []byte) error {
 	current, _, err := containerfs.ReadFile(ctx.Rootfs, store)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return "", nil
+			return nil
 		}
-		return "", fmt.Errorf("failed to read trust store %s: %w", store, err)
+		return fmt.Errorf("failed to read trust store %s: %w", store, err)
 	}
 	merged, err := certs.MergePEM(current, orgCA)
 	if err != nil {
-		return "", err
+		return err
 	}
-	return ctx.StageFile(mergedCAFileName, merged.Merged)
+	_, err = ctx.StageFile(config.MergedCAFileName, merged.Merged)
+	return err
 }
 
 func writeIndividualCA(rootfs, anchorDir string, content []byte) (string, error) {

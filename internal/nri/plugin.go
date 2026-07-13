@@ -335,6 +335,38 @@ func (p *Plugin) CreateContainer(
 		Source:      self,
 		Options:     []string{"bind", "ro"},
 	})
+
+	// Bind the per-container CA dir in at a fixed path, then point the trust env vars
+	// at it on the container spec. The wrapper sets the same variables, but only on the
+	// entrypoint process — anything started via exec is seeded from the spec instead and
+	// would otherwise get no CA config at all. Read-only: the hook writes through the
+	// host path, nothing inside the container needs to write here.
+	caDir := filepath.Dir(caFileForHook)
+	adjustment.AddMount(&api.Mount{
+		Destination: config.ContainerCADir,
+		Type:        "bind",
+		Source:      caDir,
+		Options:     []string{"bind", "ro"},
+	})
+	if err := seedMergedCA(caDir, caContent); err != nil {
+		// Fail-open: without a seed the merged path may not resolve, so leave the trust
+		// env vars off the spec rather than pointing them at a missing bundle — that
+		// would turn a working public-TLS container into a broken one.
+		p.log.Warn("failed to seed merged CA bundle; exec'd processes will not get trust env",
+			append(base, "error", err)...)
+		p.metrics.InjectionsErrors.Inc()
+	} else {
+		adjustment.AddEnv(config.EnvSSLCertFile, config.ContainerMergedCA)
+		adjustment.AddEnv(config.EnvRequestsCABundle, config.ContainerMergedCA)
+		adjustment.AddEnv(config.EnvCurlCABundle, config.ContainerMergedCA)
+		adjustment.AddEnv(config.EnvGitSSLCAInfo, config.ContainerMergedCA)
+		// Additive, so the bare org CA is correct here — see nodejs processor.
+		adjustment.AddEnv(config.EnvNodeExtraCACerts, config.ContainerOrgCA)
+		// ponytail: JAVA_TOOL_OPTIONS left to the wrapper — it appends to any value the
+		// image already set, and duplicating that merge here buys little. Java under
+		// exec still misses out; add it if a JVM container job ever needs it.
+	}
+
 	adjustment.AddHooks(&api.Hooks{CreateRuntime: []*api.Hook{hook}})
 
 	if key != "" {

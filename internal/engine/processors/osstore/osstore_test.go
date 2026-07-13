@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/natrontech/cainjekt/internal/config"
 	hookapi "github.com/natrontech/cainjekt/internal/engine/api"
 	"github.com/natrontech/cainjekt/internal/util/containerfs"
 )
@@ -239,6 +240,57 @@ func TestApplySetsIndividualCAPathFact(t *testing.T) {
 	}
 }
 
+// On a writable rootfs the wrapper points entrypoint processes at the in-place store,
+// but exec'd processes resolve the bundle in the bind-mounted dynamic CA dir. Apply
+// must refine that bundle too, or a container job step gets the plugin's seed (public
+// roots, no org CA) and internal TLS fails.
+func TestApplyWritableRootfsStagesMergedBundleForExecdProcesses(t *testing.T) {
+	t.Parallel()
+
+	rootfs := t.TempDir()
+	writeOSRelease(t, rootfs, "ID=debian\n")
+
+	storeCert := mustCreateTestCertPEM(t)
+	storePath := filepath.Join(rootfs, "etc", "ssl", "certs", "ca-certificates.crt")
+	mustMkdirAll(t, filepath.Dir(storePath))
+	if err := os.WriteFile(storePath, storeCert, 0o644); err != nil {
+		t.Fatalf("WriteFile(%q): %v", storePath, err)
+	}
+
+	dynamicDir := t.TempDir()
+	orgCert := mustCreateTestCertPEM(t)
+	caPath := filepath.Join(dynamicDir, config.DynamicCAFileName)
+	if err := os.WriteFile(caPath, orgCert, 0o644); err != nil {
+		t.Fatalf("WriteFile(%q): %v", caPath, err)
+	}
+
+	ctx := &hookapi.Context{
+		Rootfs: rootfs,
+		CAFile: caPath,
+		Facts:  hookapi.NewMapFactStore(),
+	}
+	if err := NewDebian().Apply(ctx); err != nil {
+		t.Fatalf("Apply() error = %v", err)
+	}
+
+	staged, err := os.ReadFile(filepath.Join(dynamicDir, config.MergedCAFileName))
+	if err != nil {
+		t.Fatalf("merged bundle not staged for exec'd processes: %v", err)
+	}
+	if !bytes.Contains(staged, bytes.TrimSpace(orgCert)) {
+		t.Fatalf("staged bundle is missing the org CA — internal TLS would fail under exec")
+	}
+	if !bytes.Contains(staged, bytes.TrimSpace(storeCert)) {
+		t.Fatalf("staged bundle is missing the system roots — public TLS would break")
+	}
+
+	// The wrapper must keep using the in-place store, so entrypoint processes are
+	// unchanged by this.
+	if got, _ := ctx.Facts.Get(hookapi.FactMergedCAPath); got != "/etc/ssl/certs/ca-certificates.crt" {
+		t.Fatalf("merged CA fact = %q, want the in-place store", got)
+	}
+}
+
 func TestApplyReadOnlyRootfsStagesMergedBundle(t *testing.T) {
 	t.Parallel()
 
@@ -278,23 +330,27 @@ func TestApplyReadOnlyRootfsStagesMergedBundle(t *testing.T) {
 	if v, _ := ctx.Facts.Get(hookapi.FactRootfsReadOnly); v != "true" {
 		t.Fatalf("expected read-only rootfs fact, got %q", v)
 	}
+	// The fact must name the path as the container sees it — the dynamic CA dir is
+	// bind-mounted at config.ContainerCADir. A host path here would be a dangling
+	// SSL_CERT_FILE inside the container.
 	gotMerged, ok := ctx.Facts.Get(hookapi.FactMergedCAPath)
 	if !ok {
 		t.Fatalf("missing fact %q", hookapi.FactMergedCAPath)
 	}
-	wantMerged := filepath.Join(dynamicDir, mergedCAFileName)
-	if gotMerged != wantMerged {
-		t.Fatalf("merged CA path mismatch: got=%q want=%q", gotMerged, wantMerged)
+	if gotMerged != config.ContainerMergedCA {
+		t.Fatalf("merged CA path mismatch: got=%q want=%q", gotMerged, config.ContainerMergedCA)
 	}
-	content, err := os.ReadFile(gotMerged)
+	if gotIndividual, _ := ctx.Facts.Get(hookapi.FactIndividualCAPath); gotIndividual != config.ContainerOrgCA {
+		t.Fatalf("individual CA path mismatch: got=%q want=%q", gotIndividual, config.ContainerOrgCA)
+	}
+
+	// The bundle itself is written to the host-side dynamic CA dir.
+	content, err := os.ReadFile(filepath.Join(dynamicDir, config.MergedCAFileName))
 	if err != nil {
-		t.Fatalf("ReadFile(%q): %v", gotMerged, err)
+		t.Fatalf("ReadFile(merged): %v", err)
 	}
 	if !bytes.Contains(content, bytes.TrimSpace(storeCert)) || !bytes.Contains(content, bytes.TrimSpace(orgCert)) {
 		t.Fatalf("merged bundle must contain both the system store and the org CA")
-	}
-	if v, _ := ctx.Facts.Get(hookapi.FactIndividualCAPath); v != caPath {
-		t.Fatalf("individual CA path mismatch: got=%q want=%q", v, caPath)
 	}
 }
 

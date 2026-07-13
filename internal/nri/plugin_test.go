@@ -1,6 +1,7 @@
 package nri
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -12,6 +13,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -185,6 +187,75 @@ func TestCreateContainerSetsBreadcrumbDirEnv(t *testing.T) {
 	caPath := envValue(hook.GetEnv(), config.EnvCAFile)
 	if bcDir == "" || bcDir != filepath.Dir(caPath) {
 		t.Fatalf("breadcrumb dir = %q, expected %q", bcDir, filepath.Dir(caPath))
+	}
+}
+
+// The wrapper only sets trust env on the entrypoint process. Processes started via
+// exec (every step of a GitHub Actions container job) are seeded from the container
+// spec, so the env has to be on the adjustment or they get no CA config at all.
+func TestCreateContainerPutsTrustEnvAndCAMountOnSpec(t *testing.T) {
+	source := writeTempSourceCA(t)
+	t.Setenv(config.EnvCAFile, source)
+	t.Setenv(config.EnvDynamicCARoot, t.TempDir())
+
+	p := newPlugin(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	pod := &api.PodSandbox{
+		Namespace:   "default",
+		Name:        "pod-exec",
+		Annotations: map[string]string{config.AnnoEnabled(): "true"},
+	}
+	ctr := &api.Container{Id: "containerd://exec01", Name: "app", Args: []string{"sleep", "1"}}
+
+	adj, _, err := p.CreateContainer(context.Background(), pod, ctr)
+	if err != nil {
+		t.Fatalf("CreateContainer() error = %v", err)
+	}
+
+	specEnv := map[string]string{}
+	for _, kv := range adj.GetEnv() {
+		specEnv[kv.GetKey()] = kv.GetValue()
+	}
+	for _, key := range []string{
+		config.EnvSSLCertFile,
+		config.EnvRequestsCABundle,
+		config.EnvCurlCABundle,
+		config.EnvGitSSLCAInfo,
+	} {
+		if got := specEnv[key]; got != config.ContainerMergedCA {
+			t.Fatalf("spec env %q = %q, want merged bundle %q", key, got, config.ContainerMergedCA)
+		}
+	}
+	// NODE_EXTRA_CA_CERTS is additive, so it takes the bare org CA, not the merged bundle.
+	if got := specEnv[config.EnvNodeExtraCACerts]; got != config.ContainerOrgCA {
+		t.Fatalf("spec env %q = %q, want org CA %q", config.EnvNodeExtraCACerts, got, config.ContainerOrgCA)
+	}
+
+	var caMount *api.Mount
+	for _, m := range adj.GetMounts() {
+		if m.GetDestination() == config.ContainerCADir {
+			caMount = m
+		}
+	}
+	if caMount == nil {
+		t.Fatalf("no bind mount for %q; trust env would dangle", config.ContainerCADir)
+	}
+	// Read-only: the hook writes through the host path, nothing in the container does.
+	if !slices.Contains(caMount.GetOptions(), "ro") {
+		t.Fatalf("CA mount options = %v, want read-only", caMount.GetOptions())
+	}
+
+	// The merged bundle must already exist and carry the org CA when the container
+	// starts — the hook only refines it later, and may not run at all (fail-open).
+	seeded, err := os.ReadFile(filepath.Join(caMount.GetSource(), config.MergedCAFileName))
+	if err != nil {
+		t.Fatalf("merged bundle not seeded: %v", err)
+	}
+	org, err := os.ReadFile(source)
+	if err != nil {
+		t.Fatalf("ReadFile(source): %v", err)
+	}
+	if !bytes.Contains(seeded, bytes.TrimSpace(org)) {
+		t.Fatalf("seeded merged bundle does not contain the org CA")
 	}
 }
 
