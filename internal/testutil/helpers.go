@@ -22,6 +22,20 @@ func WriteExecutableInRootfs(t testing.TB, rootfs, containerPath string) {
 	}
 }
 
+// SymlinkInRootfs creates a symlink at the given container path inside rootfs.
+// The target is written verbatim, so absolute targets point inside the container.
+func SymlinkInRootfs(t testing.TB, rootfs, containerPath, target string) {
+	t.Helper()
+
+	hostPath := containerfs.PathInRootfs(rootfs, containerPath)
+	if err := os.MkdirAll(filepath.Dir(hostPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q): %v", filepath.Dir(hostPath), err)
+	}
+	if err := os.Symlink(target, hostPath); err != nil {
+		t.Fatalf("Symlink(%q -> %q): %v", hostPath, target, err)
+	}
+}
+
 // EnvValue returns the value for the given key from an env slice, or empty string if not found.
 func EnvValue(env []string, key string) string {
 	prefix := key + "="
