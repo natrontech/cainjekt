@@ -15,6 +15,10 @@ GitHub Actions handles CI and releases. Container images are published to GitHub
 2. The release workflow builds images, tags with semver, and publishes manifests
 3. Images are tagged with: full semver, major.minor, and git SHA
 
+Pre-releases use a hyphenated tag (e.g. `v0.2.0-rc.1`): the GitHub Release is
+flagged as pre-release, and the `major.minor` and `latest` image tags plus the
+default Helm version resolution keep pointing at the last stable release.
+
 ## Container Images
 
 | Image | Source | Registry |
