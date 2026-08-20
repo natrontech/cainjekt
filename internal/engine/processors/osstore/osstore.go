@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	hookapi "github.com/natrontech/cainjekt/internal/engine/api"
+	"github.com/natrontech/cainjekt/internal/util/containerfs"
 	"github.com/natrontech/cainjekt/pkg/certs"
 	"github.com/natrontech/cainjekt/pkg/fsx"
 )
@@ -259,14 +260,6 @@ func detectTrustStorePath(rootfs string, candidates []string) (hostPath, contain
 	return "", "", errors.New("no known trust store path found in rootfs")
 }
 
-func pathInRootfs(rootfs, containerPath string) string {
-	trimmed := containerPath
-	if len(trimmed) > 0 && trimmed[0] == '/' {
-		trimmed = trimmed[1:]
-	}
-	return filepath.Join(rootfs, filepath.FromSlash(trimmed))
-}
-
 type osRelease struct {
 	id     string
 	idLike []string
@@ -274,8 +267,8 @@ type osRelease struct {
 
 func readOSRelease(rootfs string) (osRelease, error) {
 	candidates := []string{
-		pathInRootfs(rootfs, "/etc/os-release"),
-		pathInRootfs(rootfs, "/usr/lib/os-release"),
+		containerfs.PathInRootfs(rootfs, "/etc/os-release"),
+		containerfs.PathInRootfs(rootfs, "/usr/lib/os-release"),
 	}
 	for _, p := range candidates {
 		f, err := os.Open(p)
@@ -381,71 +374,11 @@ func writeIndividualCA(rootfs, anchorDir string, content []byte) (string, error)
 }
 
 func resolveContainerPath(rootfs, containerPath string) (hostPath, resolvedContainerPath string, err error) {
-	resolved, err := resolveContainerSymlinks(rootfs, containerPath)
+	resolved, err := containerfs.ResolveSymlinks(rootfs, containerPath)
 	if err != nil {
 		return "", "", err
 	}
-	return pathInRootfs(rootfs, resolved), resolved, nil
-}
-
-func resolveContainerSymlinks(rootfs, containerPath string) (string, error) {
-	remaining := splitContainerPath(containerPath)
-	resolved := make([]string, 0, len(remaining))
-	const maxSymlinkHops = 40
-	hops := 0
-
-	for len(remaining) > 0 {
-		part := remaining[0]
-		remaining = remaining[1:]
-		candidate := "/" + strings.Join(append(append([]string{}, resolved...), part), "/")
-		host := pathInRootfs(rootfs, candidate)
-		fi, statErr := os.Lstat(host)
-		if statErr != nil {
-			if errors.Is(statErr, os.ErrNotExist) {
-				resolved = append(resolved, part)
-				resolved = append(resolved, remaining...)
-				remaining = nil
-				break
-			}
-			return "", fmt.Errorf("failed to stat %s: %w", candidate, statErr)
-		}
-
-		if fi.Mode()&os.ModeSymlink == 0 {
-			resolved = append(resolved, part)
-			continue
-		}
-
-		hops++
-		if hops > maxSymlinkHops {
-			return "", fmt.Errorf("too many symlink hops while resolving %s", containerPath)
-		}
-		target, readErr := os.Readlink(host)
-		if readErr != nil {
-			return "", fmt.Errorf("failed to read symlink %s: %w", candidate, readErr)
-		}
-
-		base := "/" + strings.Join(resolved, "/")
-		targetContainer := path.Clean(path.Join(base, target))
-		if path.IsAbs(target) {
-			targetContainer = path.Clean(target)
-		}
-
-		remaining = append(splitContainerPath(targetContainer), remaining...)
-		resolved = resolved[:0]
-	}
-
-	if len(resolved) == 0 {
-		return "/", nil
-	}
-	return "/" + strings.Join(resolved, "/"), nil
-}
-
-func splitContainerPath(p string) []string {
-	clean := path.Clean("/" + strings.TrimSpace(p))
-	if clean == "/" {
-		return nil
-	}
-	return strings.Split(strings.TrimPrefix(clean, "/"), "/")
+	return containerfs.PathInRootfs(rootfs, resolved), resolved, nil
 }
 
 func (p *processor) matches(info osRelease) bool {

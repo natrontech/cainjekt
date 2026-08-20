@@ -26,6 +26,23 @@ func TestDetectApplicableWhenJavaExists(t *testing.T) {
 	}
 }
 
+func TestDetectApplicableWhenJavaIsAbsoluteSymlinkChain(t *testing.T) {
+	t.Parallel()
+
+	// RHEL alternatives layout: /usr/bin/java -> /etc/alternatives/java -> real
+	// binary, all absolute symlinks. Resolution must stay inside the rootfs.
+	rootfs := t.TempDir()
+	testutil.WriteExecutableInRootfs(t, rootfs, "/usr/lib/jvm/java-17-openjdk/bin/java")
+	testutil.SymlinkInRootfs(t, rootfs, "/etc/alternatives/java", "/usr/lib/jvm/java-17-openjdk/bin/java")
+	testutil.SymlinkInRootfs(t, rootfs, "/usr/bin/java", "/etc/alternatives/java")
+
+	p := New()
+	got := p.Detect(&hookapi.Context{Rootfs: rootfs})
+	if !got.Applicable {
+		t.Fatalf("Detect() should be applicable: %+v", got)
+	}
+}
+
 func TestDetectNotApplicableWhenJavaDoesNotExist(t *testing.T) {
 	t.Parallel()
 
