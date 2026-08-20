@@ -30,6 +30,11 @@ default Helm version resolution keep pointing at the last stable release.
 
 - Never push images from local machines. All publishing goes through GitHub Actions.
 - All images use multi-stage builds (Go builder + distroless runtime).
+- Pin all Dockerfile base images by digest (`tag@sha256:...`). When bumping a base
+  image manually, refresh the digest with
+  `docker buildx imagetools inspect <image> --format '{{.Manifest.Digest}}'`
+  (use the multi-arch index digest, not a per-platform one). Dependabot's docker
+  ecosystem keeps the digests current between manual bumps.
 - Use GitHub Actions cache (`type=gha`) for Docker layer caching.
 - Dependabot keeps all dependencies current (monthly schedule).
 - Build with `-ldflags="-s -w" -trimpath` for minimal binary size.
