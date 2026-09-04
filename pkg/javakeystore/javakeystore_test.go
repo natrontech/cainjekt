@@ -89,24 +89,26 @@ func TestEncodeMakesAliasesUnique(t *testing.T) {
 		t.Run(format.String(), func(t *testing.T) {
 			t.Parallel()
 
-			encoded, err := Encode(format, []Entry{
-				{Alias: "dup", Cert: newTestCert(t, "a")},
-				{Alias: "dup", Cert: newTestCert(t, "b")},
-				{Alias: "dup", Cert: newTestCert(t, "c")},
-			})
+			const sharedAlias = "dup"
+			entries := make([]Entry, 0, 3)
+			for _, cn := range []string{"a", "b", "c"} {
+				entries = append(entries, Entry{Alias: sharedAlias, Cert: newTestCert(t, cn)})
+			}
+
+			encoded, err := Encode(format, entries)
 			if err != nil {
 				t.Fatalf("Encode() error = %v", err)
 			}
 
-			_, entries, err := Parse(encoded)
+			_, decoded, err := Parse(encoded)
 			if err != nil {
 				t.Fatalf("Parse() error = %v", err)
 			}
-			if len(entries) != 3 {
-				t.Fatalf("Parse() returned %d entries, want 3", len(entries))
+			if len(decoded) != 3 {
+				t.Fatalf("Parse() returned %d entries, want 3", len(decoded))
 			}
 			seen := map[string]struct{}{}
-			for _, e := range entries {
+			for _, e := range decoded {
 				if _, dup := seen[e.Alias]; dup {
 					t.Fatalf("duplicate alias %q survived encoding", e.Alias)
 				}
