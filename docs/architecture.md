@@ -67,7 +67,7 @@ The wrapper runs as the container's first process (PID 1). It:
 1. **Reads the persisted hook context** from `/etc/cainjekt/hook-context.json`
 2. **Runs wrapper processors** for each detected language runtime:
    - `lang-go`: sets `SSL_CERT_FILE`
-   - `lang-java`: sets `JAVA_TOOL_OPTIONS` with `-Djavax.net.ssl.trustStore=... -Djavax.net.ssl.trustStoreType=PEM`
+   - `lang-java`: nothing, unless the hook could not patch `cacerts` in place — then `JAVA_TOOL_OPTIONS` points at the staged keystore
    - `lang-nodejs`: sets `NODE_EXTRA_CA_CERTS`
    - `lang-python`: sets `SSL_CERT_FILE` and `REQUESTS_CA_BUNDLE`
    - `lang-ruby`: sets `SSL_CERT_FILE`
@@ -116,7 +116,7 @@ These run in the wrapper phase and set environment variables:
 | Processor | Detection | Env Vars Set |
 |-----------|-----------|-------------|
 | `lang-go` | `/usr/local/go/bin/go` | `SSL_CERT_FILE` |
-| `lang-java` | `/usr/bin/java` | `JAVA_TOOL_OPTIONS` (`-Djavax.net.ssl.trustStore`, `-Djavax.net.ssl.trustStoreType=PEM`) |
+| `lang-java` | `/usr/bin/java`, `$JAVA_HOME`, `*/lib/security/cacerts` | none normally; `JAVA_TOOL_OPTIONS` (`-Djavax.net.ssl.trustStore`, `-Djavax.net.ssl.trustStoreType`) when `cacerts` is not writable |
 | `lang-nodejs` | `/usr/bin/node` | `NODE_EXTRA_CA_CERTS` |
 | `lang-python` | `/usr/bin/python3` | `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE` |
 | `lang-ruby` | `/usr/bin/ruby` | `SSL_CERT_FILE` |

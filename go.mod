@@ -7,6 +7,7 @@ require (
 	github.com/opencontainers/runtime-spec v1.3.0
 	github.com/prometheus/client_golang v1.24.1
 	github.com/prometheus/client_model v0.6.2
+	software.sslmate.com/src/go-pkcs12 v0.7.3
 )
 
 require (
@@ -20,6 +21,7 @@ require (
 	github.com/prometheus/procfs v0.21.1 // indirect
 	github.com/sirupsen/logrus v1.10.1 // indirect
 	github.com/tetratelabs/wazero v1.12.0 // indirect
+	golang.org/x/crypto v0.55.0 // indirect
 	golang.org/x/mod v0.40.0 // indirect
 	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect

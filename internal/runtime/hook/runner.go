@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 
+	rs "github.com/opencontainers/runtime-spec/specs-go"
+
 	"github.com/natrontech/cainjekt/internal/config"
 	hookapi "github.com/natrontech/cainjekt/internal/engine/api"
 	"github.com/natrontech/cainjekt/internal/engine/processors"
@@ -40,7 +42,10 @@ func Run(log *slog.Logger) error {
 		Rootfs:      oci.ResolveRootfsPath(state.Bundle, spec),
 		CAFile:      getenvOr(config.EnvCAFile, config.DefaultCAFile),
 		FailPolicy:  getenvOr(config.EnvFailPolicy, config.FailPolicyOpen),
-		Facts:       hookapi.NewMapFactStore(),
+		// The container's own environment, for processors that key off it
+		// (JAVA_HOME). The wrapper replaces this with the live process env.
+		Env:   specEnv(spec),
+		Facts: hookapi.NewMapFactStore(),
 	}
 
 	all := processors.Default()
@@ -140,6 +145,13 @@ func factOrEmpty(ctx *hookapi.Context, key hookapi.FactKey) string {
 	}
 	v, _ := ctx.Facts.Get(key)
 	return v
+}
+
+func specEnv(spec *rs.Spec) []string {
+	if spec == nil || spec.Process == nil {
+		return nil
+	}
+	return spec.Process.Env
 }
 
 func getenvOr(key, fallback string) string {

@@ -166,16 +166,34 @@ kubectl exec my-pod -- ls /usr/local/share/ca-certificates/cainjekt.crt
 
 ### Check environment variables
 
+The wrapper sets these on the **entrypoint process only**. `kubectl exec` starts a
+new process whose environment comes from the pod spec and image config, so
+`kubectl exec -- env` will never show them — read PID 1's environment instead:
+
 ```bash
-# Java
-kubectl exec my-pod -- env | grep JAVA_TOOL_OPTIONS
-
-# Node.js
-kubectl exec my-pod -- env | grep NODE_EXTRA_CA_CERTS
-
-# Python
-kubectl exec my-pod -- env | grep SSL_CERT_FILE
+kubectl exec my-pod -- sh -c "tr '\\0' '\\n' < /proc/1/environ" | grep -E \
+  "NODE_EXTRA_CA_CERTS|SSL_CERT_FILE|REQUESTS_CA_BUNDLE|JAVA_TOOL_OPTIONS"
 ```
+
+If that comes back empty for every language, the wrapper did not run — check
+that PID 1 is the wrapper:
+
+```bash
+kubectl exec my-pod -- sh -c "tr '\\0' ' ' < /proc/1/cmdline"
+```
+
+### Check the Java trust store
+
+Java does not rely on the wrapper: the CA is added to the image's `cacerts`
+keystore during the hook phase, so an `exec` session sees it directly.
+
+```bash
+kubectl exec my-pod -- keytool -list -keystore "$JAVA_HOME/lib/security/cacerts" \
+  -storepass changeit | grep cainjekt-
+```
+
+`JAVA_TOOL_OPTIONS` is set only when `cacerts` could not be written (read-only
+rootfs); check PID 1's environment as above in that case.
 
 ### Check the plugin logs
 
@@ -256,8 +274,8 @@ short token lifetimes.
 | Scenario | Works? | Details |
 |----------|--------|---------|
 | Standard Linux distros | Yes | Debian, Ubuntu, Alpine, RHEL, Fedora, Arch, openSUSE |
-| Java apps (JDK 18+) | Yes | `JAVA_TOOL_OPTIONS` with `-Djavax.net.ssl.trustStoreType=PEM` |
-| Java apps (JDK < 18) | No | PEM trust store type not supported; would need JKS keystore manipulation |
+| Java apps (any JDK) | Yes | The org CA is added to the image's `cacerts` (JKS or PKCS#12), so the default trust store lookup finds it |
+| Java apps, read-only rootfs | Yes | Merged keystore staged on the dynamic CA path, `JAVA_TOOL_OPTIONS` points the JVM at it |
 | Node.js apps | Yes | `NODE_EXTRA_CA_CERTS` |
 | Python apps | Yes | `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE` |
 | Ruby apps | Yes | `SSL_CERT_FILE` |

@@ -20,6 +20,7 @@ internal/
 pkg/
   certs/               PEM certificate handling
   fsx/                 Atomic file operations
+  javakeystore/        Java trust store (JKS / PKCS#12) read and write
 ```
 
 ## Adding a New Processor
