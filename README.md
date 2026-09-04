@@ -110,7 +110,7 @@ Both `linux/amd64` and `linux/arm64` platforms are supported.
 
 - **Static binaries** (Go, Rust): CA verification is compiled in — system stores are ignored
 - **Distroless/scratch images**: No `/etc/os-release`, limited writable filesystem — fallback processor may not detect the correct trust store
-- **Read-only root filesystems**: OS trust store cannot be modified, but language processors (Java, Node.js, Python) still work via env vars pointing to the dynamic CA path
+- **Read-only root filesystems**: OS trust store cannot be modified, but language processors (Java, Node.js, Python) still work via env vars pointing to the dynamic CA path (Java gets a merged keystore staged there)
 - **Fail-open default**: Failed injection is silent — container starts without CA (check pod logs for warnings)
 - **Nodes without NRI**: Some managed Kubernetes nodes (e.g. AKS GPU nodes) don't have NRI enabled in containerd. The plugin will crash-loop on these nodes — exclude them via `nodeSelector` or `affinity` in the Helm values
 
@@ -119,7 +119,7 @@ Both `linux/amd64` and `linux/arm64` platforms are supported.
 | Processor | Env Var Set | Detection |
 |-----------|------------|-----------|
 | `lang-go` | `SSL_CERT_FILE` | `/usr/local/go/bin/go` |
-| `lang-java` | `JAVA_TOOL_OPTIONS` (trustStore + PEM type, JDK 18+) | `/usr/bin/java` |
+| `lang-java` | none — the CA is added to the image's `cacerts` keystore; `JAVA_TOOL_OPTIONS` only as a read-only-rootfs fallback | `/usr/bin/java`, `$JAVA_HOME`, `*/lib/security/cacerts` |
 | `lang-nodejs` | `NODE_EXTRA_CA_CERTS` | `/usr/bin/node` |
 | `lang-python` | `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE` | `/usr/bin/python3` |
 | `lang-ruby` | `SSL_CERT_FILE` | `/usr/bin/ruby` |

@@ -51,7 +51,7 @@ make copy-plugin              # Copy binary to kind node
 - `api/types.go`: Core interfaces — `Processor` (Detect/Apply) and `WrapperProcessor` (adds ApplyWrapper for env var injection)
 - `processors/registry.go`: Global registry with priority-based detection, include/exclude filtering via pod annotations
 - `processors/osstore/`: OS CA store processors (debian, rhel, alpine, arch, opensuse, fallback) — priority 275-300. Detects read-only rootfs and skips gracefully.
-- `processors/golang/`, `processors/java/`, `processors/nodejs/`, `processors/python/`, `processors/ruby/`: Language processors — priority 100
+- `processors/golang/`, `processors/java/`, `processors/nodejs/`, `processors/python/`, `processors/ruby/`: Language processors — priority 100. `java` is the odd one out: it rewrites the image's `cacerts` keystore (`pkg/javakeystore`) instead of setting an env var, because the JVM cannot read a PEM bundle.
 
 **Key flow**: NRI intercepts container creation → stages CA file in `/run/cainjekt/containers/{id}/` → OCI hook detects OS and patches trust stores → wrapper sets env vars and execs original entrypoint.
 

@@ -63,7 +63,7 @@ The core architecture is unchanged — we kept the three-phase pipeline, the pro
 |-----------|--------|-------|
 | Node.js (`NODE_EXTRA_CA_CERTS`) | Yes | Yes |
 | Python (`SSL_CERT_FILE`) | Yes | Yes |
-| Java (`JAVA_TOOL_OPTIONS`) | No | Yes |
+| Java (`cacerts` keystore) | No | Yes |
 | Go (`SSL_CERT_FILE`) | No | Yes |
 | Ruby (`SSL_CERT_FILE`) | No | Yes |
 

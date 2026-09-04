@@ -14,6 +14,10 @@ const (
 	FactIndividualCAPath FactKey = "individual_ca_path"
 	FactMergedCAPath     FactKey = "merged_ca_path"
 	FactRootfsReadOnly   FactKey = "rootfs_read_only"
+	// Set only when the container's own cacerts could not be patched in place;
+	// the wrapper then points the JVM at this staged keystore.
+	FactJavaTrustStorePath FactKey = "java_trust_store_path"
+	FactJavaTrustStoreType FactKey = "java_trust_store_type"
 )
 
 // PreferredCABundlePath returns the bundle that trust-REPLACING consumers
