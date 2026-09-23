@@ -11,6 +11,7 @@ import (
 
 	"github.com/natrontech/cainjekt/internal/config"
 	hookapi "github.com/natrontech/cainjekt/internal/engine/api"
+	"github.com/natrontech/cainjekt/internal/util/containerfs"
 	"github.com/natrontech/cainjekt/pkg/fsx"
 )
 
@@ -81,7 +82,10 @@ func (s State) ToHookContext() *hookapi.Context {
 // Write persists the hook state and a human-readable status file to the container rootfs.
 func Write(rootfs string, state State) error {
 	containerPath := contextFilePath()
-	hostPath := pathInRootfs(rootfs, containerPath)
+	hostPath, err := resolveInRootfs(rootfs, containerPath)
+	if err != nil {
+		return fmt.Errorf("failed to resolve hook context path %s: %w", containerPath, err)
+	}
 	dir := filepath.Dir(hostPath)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("failed to create hook context dir %s: %w", dir, err)
@@ -187,9 +191,17 @@ func contextFilePath() string {
 	return config.HookContextFile
 }
 
-func pathInRootfs(rootfs, containerPath string) string {
-	trimmed := strings.TrimPrefix(containerPath, "/")
-	return filepath.Join(rootfs, filepath.FromSlash(trimmed))
+// resolveInRootfs maps a container-absolute path onto the host, following symlinks
+// within the rootfs only. The hook writes into a root filesystem that comes from
+// the container image, so a plain filepath.Join would follow a symlinked path
+// component out of the rootfs. AtomicWrite's RefuseSymlink does not cover this:
+// it checks the final component, not the parent directories.
+func resolveInRootfs(rootfs, containerPath string) (string, error) {
+	resolved, err := containerfs.ResolveSymlinks(rootfs, containerPath)
+	if err != nil {
+		return "", err
+	}
+	return containerfs.PathInRootfs(rootfs, resolved), nil
 }
 
 func cloneStringMap(in map[string]string) map[string]string {
