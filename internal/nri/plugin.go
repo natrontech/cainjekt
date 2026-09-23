@@ -397,6 +397,14 @@ func (p *Plugin) Synchronize(
 	p.ready.Store(true)
 	p.log.Info("runtime synchronised, plugin is ready", "pods", len(pods), "containers", len(ctrs))
 
+	// Reconcile the tracked set first, synchronously. It is rebuilt from scratch on
+	// every start, and the orphan cleaner deletes any staged CA directory that is
+	// not in it. Without this, ten minutes after each restart the cleaner wipes the
+	// CA bundles of containers that are still running — which breaks the dynamic CA
+	// path for read-only-rootfs containers and destroys the hook breadcrumbs the
+	// missed-container scan below reads.
+	p.adoptStagedContainers(ctrs)
+
 	// Off the hot path: this does one API lookup per namespace and must not hold
 	// up the handshake that makes us ready for new containers.
 	p.verifyWG.Add(1)
@@ -406,6 +414,35 @@ func (p *Plugin) Synchronize(
 	}()
 
 	return nil, nil
+}
+
+// adoptStagedContainers re-tracks containers the runtime already knows about, so a
+// restarted plugin does not treat its own earlier work as orphaned. Only containers
+// with a staged CA directory are adopted: those are the ones we injected, and the
+// only ones the orphan cleaner would remove.
+func (p *Plugin) adoptStagedContainers(ctrs []*api.Container) {
+	root := dynamicCARoot()
+	staged := 0
+
+	for _, ctr := range ctrs {
+		key, err := containerCAKey(ctr)
+		if err != nil {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(root, key)); err != nil {
+			continue // nothing staged for this container, nothing to protect
+		}
+		p.tracked.Store(key, struct{}{})
+		staged++
+	}
+
+	// Set, not Inc: this is a reconciliation against what the runtime reports, and
+	// RemoveContainer decrements from here on.
+	p.metrics.ActiveContainers.Set(float64(staged))
+	if staged > 0 {
+		p.log.Info("adopted staged CA directories from a previous plugin instance",
+			"containers", staged)
+	}
 }
 
 // reportMissedContainers counts running containers that are opted in but carry no
