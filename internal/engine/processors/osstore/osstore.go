@@ -10,6 +10,7 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	hookapi "github.com/natrontech/cainjekt/internal/engine/api"
 	"github.com/natrontech/cainjekt/internal/util/containerfs"
@@ -266,9 +267,13 @@ type osRelease struct {
 }
 
 func readOSRelease(rootfs string) (osRelease, error) {
-	candidates := []string{
-		containerfs.PathInRootfs(rootfs, "/etc/os-release"),
-		containerfs.PathInRootfs(rootfs, "/usr/lib/os-release"),
+	// Resolve within the rootfs: the image is untrusted, and a symlinked
+	// /etc/os-release must not redirect this read at a file on the node.
+	candidates := make([]string, 0, 2)
+	for _, c := range []string{"/etc/os-release", "/usr/lib/os-release"} {
+		if resolved, err := containerfs.ResolveSymlinks(rootfs, c); err == nil {
+			candidates = append(candidates, containerfs.PathInRootfs(rootfs, resolved))
+		}
 	}
 	for _, p := range candidates {
 		f, err := os.Open(p)
@@ -401,7 +406,9 @@ func (p *processor) matches(info osRelease) bool {
 
 func isRootfsWritable(rootfs string) bool {
 	probe := filepath.Join(rootfs, ".cainjekt-probe")
-	f, err := os.Create(probe)
+	// O_NOFOLLOW|O_EXCL: the probe path is inside an untrusted rootfs, so never
+	// follow or reuse an existing entry there; fail closed as "not writable".
+	f, err := os.OpenFile(probe, os.O_CREATE|os.O_EXCL|os.O_WRONLY|syscall.O_NOFOLLOW, 0o600)
 	if err != nil {
 		return false
 	}
