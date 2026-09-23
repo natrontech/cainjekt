@@ -24,6 +24,8 @@ type Metrics struct {
 	NRIAvailable         *prometheus.GaugeVec
 	HookIncompleteTotal  prometheus.Counter
 	NsLookupErrors       prometheus.Counter
+	NsLookupSkipped      prometheus.Counter
+	MissedContainers     prometheus.Gauge
 }
 
 func newMetrics() *Metrics {
@@ -85,6 +87,16 @@ func newMetrics() *Metrics {
 			Name: "cainjekt_ns_lookup_errors_total",
 			Help: "Namespace label lookup failures (e.g. expired SA token); may cause opt-in pods to be skipped.",
 		}),
+		NsLookupSkipped: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "cainjekt_ns_lookup_skipped_total",
+			Help: "Containers skipped because the namespace label lookup failed. " +
+				"Unlike cainjekt_skipped_total these may well have been opted in, and got no CA.",
+		}),
+		MissedContainers: prometheus.NewGauge(prometheus.GaugeOpts{
+			Name: "cainjekt_missed_containers",
+			Help: "Opted-in containers already running at plugin startup that were never injected " +
+				"(created while the plugin was disconnected). They need a restart to get the CA.",
+		}),
 	}
 
 	reg.MustRegister(
@@ -101,6 +113,8 @@ func newMetrics() *Metrics {
 		m.NRIAvailable,
 		m.HookIncompleteTotal,
 		m.NsLookupErrors,
+		m.NsLookupSkipped,
+		m.MissedContainers,
 	)
 
 	return m

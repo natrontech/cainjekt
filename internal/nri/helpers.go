@@ -1,6 +1,7 @@
 package nri
 
 import (
+	"context"
 	"encoding/pem"
 	"io"
 	"log/slog"
@@ -27,14 +28,21 @@ func newPlugin(log *slog.Logger) *Plugin {
 type injectDecision struct {
 	inject bool
 	source string // pod-annotation | pod-label | namespace-label | default
-	reason string // opted-in | explicit-opt-out | not-opted-in
+	reason string // opted-in | explicit-opt-out | not-opted-in | lookup-failed
 	value  string // observed value when explicit-opt-out
+	err    error  // set when reason is lookup-failed
 }
 
 // decide checks pod annotations, pod labels, and namespace labels for the opt-in key.
 // Pod-level annotation takes highest priority. Then pod labels. Then namespace labels
 // (fetched from the Kubernetes API with caching).
-func decide(pod *api.PodSandbox, nsCache *nsLabelCache) injectDecision {
+//
+// ctx carries NRI's request deadline, which the namespace lookup must respect
+// (see nsLookupBudget). A lookup that *fails* yields reason "lookup-failed",
+// which is deliberately not the same as "not-opted-in": the caller reports it
+// separately, so a pod opted in by a namespace label can no longer be dropped
+// silently just because the API server was briefly unreachable.
+func decide(ctx context.Context, pod *api.PodSandbox, nsCache *nsLabelCache) injectDecision {
 	annos := pod.GetAnnotations()
 	labels := pod.GetLabels()
 	key := config.AnnoEnabled()
@@ -46,7 +54,11 @@ func decide(pod *api.PodSandbox, nsCache *nsLabelCache) injectDecision {
 		return decisionFromValue(v, "pod-label")
 	}
 	if nsCache != nil && pod.GetNamespace() != "" {
-		if v, ok := nsCache.getLabel(pod.GetNamespace(), key); ok {
+		v, ok, err := nsCache.getLabel(ctx, pod.GetNamespace(), key)
+		if err != nil {
+			return injectDecision{source: "namespace-label", reason: "lookup-failed", err: err}
+		}
+		if ok {
 			return decisionFromValue(v, "namespace-label")
 		}
 	}
