@@ -113,7 +113,7 @@ data:
         },
         {
           "title": "Missed",
-          "description": "Opted-in containers already running when the plugin connected, with no CA bundle. They were created while cainjekt was disconnected (node boot, containerd restart, DaemonSet rollout) and cannot be fixed in place — the pods need a restart. The cainjekt pod log names them.",
+          "description": "Opted-in containers already running when the plugin connected, with no CA bundle. They were created while cainjekt was disconnected (node boot, containerd restart, DaemonSet rollout) and cannot be fixed in place — the pods need a restart. The cainjekt pod log names them. The count clears as those pods are restarted.",
           "type": "stat",
           "gridPos": { "h": 6, "w": 3, "x": 13, "y": 5 },
           "datasource": { "type": "prometheus", "uid": "${datasource}" },

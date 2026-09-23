@@ -95,7 +95,8 @@ func newMetrics() *Metrics {
 		MissedContainers: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "cainjekt_missed_containers",
 			Help: "Opted-in containers already running at plugin startup that were never injected " +
-				"(created while the plugin was disconnected). They need a restart to get the CA.",
+				"(created while the plugin was disconnected). They need a restart to get the CA; " +
+				"the gauge drops as each one is removed.",
 		}),
 	}
 

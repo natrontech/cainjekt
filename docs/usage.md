@@ -269,6 +269,31 @@ via a **pod** annotation or label are unaffected (no API call), so moving the
 opt-in to the pod template is a robust workaround for environments with very
 short token lifetimes.
 
+### Dashboard shows containers under "Missed"
+
+`cainjekt_missed_containers` counts running, opted-in containers that have no
+`hook.done` breadcrumb on the node — they were created while the plugin was not
+connected (node boot, containerd restart, DaemonSet rollout) or during a gap in
+namespace-label opt-in, and never received the CA bundle. The cainjekt pod log
+names each one by namespace, pod and container.
+
+They cannot be fixed in place; restart the pods. The gauge drops as those
+containers are removed, so it should trend to zero as you work through the list.
+
+Breadcrumbs live under `/run/cainjekt/containers/<id>/` and are per-node, so a
+container injected before the *node* rebooted is genuinely uninjected. To confirm
+an individual container either way, check for the file the hook writes into its
+root filesystem — it survives anything that happens on the host side:
+
+```bash
+kubectl exec -n <namespace> <pod> -c <container> -- cat /etc/cainjekt/status.json
+```
+
+Absent means the hook never ran for that container. Distroless images have no
+shell or `cat`; for those, inspect the container on the node instead
+(`crictl inspect <id> | jq '.info.runtimeSpec.process.args'` shows the cainjekt
+wrapper prepended to the entrypoint if injection happened).
+
 ## Limitations
 
 | Scenario | Works? | Details |

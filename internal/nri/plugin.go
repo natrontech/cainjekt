@@ -28,6 +28,7 @@ type Plugin struct {
 	log       *slog.Logger
 	metrics   *Metrics
 	tracked   sync.Map // map[string]struct{} — sanitized container IDs
+	missed    sync.Map // map[string]struct{} — uninjected containers found by the startup scan
 	nsCache   *nsLabelCache
 	ready     atomic.Bool    // true once the runtime has synchronised with us
 	verifyWG  sync.WaitGroup // tracks in-flight hook-verification goroutines
@@ -359,6 +360,13 @@ func (p *Plugin) RemoveContainer(ctx context.Context, pod *api.PodSandbox, ctr *
 		if _, loaded := p.tracked.LoadAndDelete(key); loaded {
 			p.metrics.ActiveContainers.Dec()
 		}
+		// A missed container is actionable exactly once — when the operator restarts
+		// its pod. Without this the gauge keeps its startup value until cainjekt
+		// itself restarts, so the alert never clears and the number on the dashboard
+		// is however many were missed at the last Synchronize, not now.
+		if _, loaded := p.missed.LoadAndDelete(key); loaded {
+			p.metrics.MissedContainers.Dec()
+		}
 	}
 
 	// Cleanup is best-effort and must not depend on the API server being reachable:
@@ -457,13 +465,16 @@ func (p *Plugin) reportMissedContainers(pods []*api.PodSandbox, ctrs []*api.Cont
 		byID[pod.GetId()] = pod
 	}
 
-	missed := 0
+	// Collected first and committed at the end: a scan that aborts early must not
+	// leave the set and the gauge disagreeing, or RemoveContainer decrements below
+	// what was ever published.
+	var keys []string
 	for _, ctr := range ctrs {
 		select {
 		case <-p.stopCh:
 			return
 		case <-ctx.Done():
-			p.log.Warn("missed-container scan timed out", "scanned_so_far", missed)
+			p.log.Warn("missed-container scan timed out", "scanned_so_far", len(keys))
 			return
 		default:
 		}
@@ -487,7 +498,7 @@ func (p *Plugin) reportMissedContainers(pods []*api.PodSandbox, ctrs []*api.Cont
 			continue // we injected this one in a previous life
 		}
 
-		missed++
+		keys = append(keys, key)
 		p.log.Warn("missed injection: container was created while the plugin was not connected — "+
 			"it has no CA bundle and needs a restart",
 			"namespace", pod.GetNamespace(),
@@ -497,9 +508,15 @@ func (p *Plugin) reportMissedContainers(pods []*api.PodSandbox, ctrs []*api.Cont
 		)
 	}
 
-	p.metrics.MissedContainers.Set(float64(missed))
-	if missed > 0 {
+	// Clear first: the runtime can re-Synchronize on reconnect, and stale keys would
+	// decrement a gauge they no longer contribute to.
+	p.missed.Clear()
+	for _, k := range keys {
+		p.missed.Store(k, struct{}{})
+	}
+	p.metrics.MissedContainers.Set(float64(len(keys)))
+	if len(keys) > 0 {
 		p.log.Warn("missed injection summary: restart these pods to pick up the CA bundle",
-			"missed_containers", missed, "running_containers", len(ctrs))
+			"missed_containers", len(keys), "running_containers", len(ctrs))
 	}
 }

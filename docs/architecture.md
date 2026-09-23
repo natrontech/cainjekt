@@ -194,6 +194,8 @@ The NRI plugin exposes metrics on `:9443/metrics`:
 | `cainjekt_processor_applied_total{processor}` | Counter | Per-processor application count |
 | `cainjekt_hook_incomplete_total` | Counter | OCI hooks that did not finish (SIGKILLed on timeout). Alert on sustained increase: `rate(cainjekt_hook_incomplete_total[5m]) > 0` — usually means `CAINJEKT_HOOK_TIMEOUT_SEC` is too low. |
 | `cainjekt_ns_lookup_errors_total` | Counter | Namespace label lookups that failed (expired service account token, API unreachable). Alert on any increase: `rate(cainjekt_ns_lookup_errors_total[5m]) > 0` — namespace-label opt-in pods are being silently skipped. |
+| `cainjekt_ns_lookup_skipped_total` | Counter | Containers skipped because the namespace lookup failed, so opt-in could not be determined. Unlike `cainjekt_skipped_total` these may well have been opted in and got no CA. |
+| `cainjekt_missed_containers` | Gauge | Opted-in containers already running when the plugin connected that carry no `hook.done` breadcrumb — created during a gap in coverage and never injected. Set by the startup scan and decremented as each one is removed, so it reads as outstanding work, not a historical total. Cannot be fixed in place: the pods need a restart. |
 
 Plus standard Go runtime and process metrics via `prometheus/client_golang`.
 
