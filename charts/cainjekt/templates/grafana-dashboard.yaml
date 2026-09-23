@@ -112,6 +112,39 @@ data:
           "targets": [{ "expr": "round(sum(increase(cainjekt_orphans_cleaned_total[1h])))" }]
         },
         {
+          "title": "Missed",
+          "description": "Opted-in containers already running when the plugin connected, with no CA bundle. They were created while cainjekt was disconnected (node boot, containerd restart, DaemonSet rollout) and cannot be fixed in place — the pods need a restart. The cainjekt pod log names them.",
+          "type": "stat",
+          "gridPos": { "h": 6, "w": 3, "x": 13, "y": 5 },
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } } },
+          "options": { "graphMode": "none" },
+          "targets": [{ "expr": "sum(cainjekt_missed_containers)", "legendFormat": "need restart" }]
+        },
+        {
+          "title": "Opt-in Unknown",
+          "description": "Containers skipped because the namespace label lookup failed, so cainjekt could not tell whether they opted in. Unlike Skipped, these may well have been opted in and got no CA. Spikes here usually mean the API server was unreachable from the node while CNI/CoreDNS converged after a node image update.",
+          "type": "stat",
+          "gridPos": { "h": 6, "w": 3, "x": 16, "y": 5 },
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] } } },
+          "options": { "graphMode": "none" },
+          "targets": [{ "expr": "round(sum(increase(cainjekt_ns_lookup_skipped_total[1h])))", "legendFormat": "last 1h" }]
+        },
+        {
+          "title": "Injection Gaps",
+          "description": "The three ways a container silently ends up without a CA bundle. Correlate with node image upgrades and cainjekt pod restarts.",
+          "type": "timeseries",
+          "gridPos": { "h": 6, "w": 5, "x": 19, "y": 5 },
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "fieldConfig": { "defaults": { "color": { "mode": "palette-classic" }, "custom": { "fillOpacity": 20, "lineWidth": 2, "showPoints": "never" } } },
+          "targets": [
+            { "expr": "sum(increase(cainjekt_ns_lookup_skipped_total[5m]))", "legendFormat": "opt-in unknown" },
+            { "expr": "sum(increase(cainjekt_ns_lookup_errors_total[5m]))", "legendFormat": "ns lookup errors" },
+            { "expr": "sum(increase(cainjekt_hook_incomplete_total[5m]))", "legendFormat": "hook incomplete" }
+          ]
+        },
+        {
           "title": "NRI Node Status",
           "description": "Shows which nodes have NRI available for CA injection.",
           "type": "table",

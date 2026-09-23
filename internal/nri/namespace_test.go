@@ -1,6 +1,7 @@
 package nri
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"net/http"
@@ -64,7 +65,7 @@ func TestNSLabelCacheRefreshesRotatedToken(t *testing.T) {
 	}
 
 	// Stale token -> 401 -> treated as not opted in, but surfaced via the metric.
-	if _, ok := c.getLabel("argocd", config.AnnoEnabled()); ok {
+	if _, ok, _ := c.getLabel(context.Background(), "argocd", config.AnnoEnabled()); ok {
 		t.Fatal("expected lookup to fail while the cached token is stale")
 	}
 	if got := counterValue(t, m.NsLookupErrors); got != 1 {
@@ -75,7 +76,7 @@ func TestNSLabelCacheRefreshesRotatedToken(t *testing.T) {
 	if err := os.WriteFile(tokenPath, []byte("new-token"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	v, ok := c.getLabel("argocd", config.AnnoEnabled())
+	v, ok, _ := c.getLabel(context.Background(), "argocd", config.AnnoEnabled())
 	if !ok || v != "true" {
 		t.Fatalf("expected opt-in label after token rotation, got value=%q ok=%v", v, ok)
 	}

@@ -197,8 +197,12 @@ func (p *Plugin) verifyHookCompletion(key string, base []any) {
 }
 
 // CreateContainer intercepts container creation to inject CA certificates.
+//
+// ctx carries NRI's plugin request deadline and is passed down to the namespace
+// lookup: overrunning it is a fatal error to containerd, which closes the plugin
+// connection and stops injection on the whole node.
 func (p *Plugin) CreateContainer(
-	_ context.Context, pod *api.PodSandbox, ctr *api.Container,
+	ctx context.Context, pod *api.PodSandbox, ctr *api.Container,
 ) (*api.ContainerAdjustment, []*api.ContainerUpdate, error) {
 	cid := shortID(ctr)
 	base := []any{
@@ -217,16 +221,29 @@ func (p *Plugin) CreateContainer(
 		)...,
 	)
 
-	d := decide(pod, p.nsCache)
+	d := decide(ctx, pod, p.nsCache)
 	if !d.inject {
+		suspects := suspiciousKeys(pod, p.nsCache)
+		switch {
+		// A failed namespace lookup is not an opt-out — we simply could not tell.
+		// It is the dominant silent-miss path on a freshly booted node, where the
+		// API server is unreachable until CNI/CoreDNS converge, so it gets its own
+		// metric and a Warn rather than being buried in cainjekt_skipped_total.
+		case d.reason == "lookup-failed":
+			p.log.Warn("skip: could not determine opt-in, namespace label lookup failed — "+
+				"if this namespace is opted in, the container did NOT get the CA bundle",
+				append(base, "error", d.err)...)
+			p.metrics.NsLookupSkipped.Inc()
+			return nil, nil, nil
+
 		// Flag typos in the cainjekt-prefixed keys — a common cause of silent skips.
-		if suspects := suspiciousKeys(pod, p.nsCache); len(suspects) > 0 {
+		case len(suspects) > 0:
 			p.log.Warn("skip: pod has cainjekt-prefixed keys but no recognised opt-in — check for typos",
 				append(base, "expected_key", config.AnnoEnabled(), "unrecognised_keys", suspects)...)
-		} else if d.reason == "explicit-opt-out" {
+		case d.reason == "explicit-opt-out":
 			p.log.Info("skip: explicit opt-out",
 				append(base, "source", d.source, "value", d.value)...)
-		} else {
+		default:
 			p.log.Debug("skip: not opted in", append(base, "source", d.source)...)
 		}
 		p.metrics.SkippedTotal.Inc()
@@ -326,7 +343,7 @@ func (p *Plugin) CreateContainer(
 }
 
 // RemoveContainer cleans up per-container dynamic CA files.
-func (p *Plugin) RemoveContainer(_ context.Context, pod *api.PodSandbox, ctr *api.Container) error {
+func (p *Plugin) RemoveContainer(ctx context.Context, pod *api.PodSandbox, ctr *api.Container) error {
 	cid := shortID(ctr)
 	base := []any{
 		"namespace", pod.GetNamespace(),
@@ -344,7 +361,10 @@ func (p *Plugin) RemoveContainer(_ context.Context, pod *api.PodSandbox, ctr *ap
 		}
 	}
 
-	if !decide(pod, p.nsCache).inject {
+	// Cleanup is best-effort and must not depend on the API server being reachable:
+	// if we cannot tell whether the pod opted in, remove the staged CA dir anyway
+	// rather than leaking it until the orphan cleaner notices.
+	if d := decide(ctx, pod, p.nsCache); !d.inject && d.reason != "lookup-failed" {
 		return nil
 	}
 	p.metrics.CleanupsTotal.Inc()
@@ -365,10 +385,84 @@ func (p *Plugin) onClose() {
 // and is ready to dispatch container lifecycle events. We use this as the signal
 // that the plugin is truly ready — before this, the HTTP server is up but NRI
 // wouldn't see any CreateContainer calls.
+//
+// The pods/containers the runtime hands us here are the ones that already existed
+// while we were not connected — i.e. exactly the ones we could not inject. We
+// cannot fix them (an NRI ContainerUpdate only adjusts resources, not mounts,
+// env or hooks), but we can say which they are, which is the difference between
+// "CA injection is silently missing" and "restart these pods".
 func (p *Plugin) Synchronize(
-	_ context.Context, _ []*api.PodSandbox, _ []*api.Container,
+	_ context.Context, pods []*api.PodSandbox, ctrs []*api.Container,
 ) ([]*api.ContainerUpdate, error) {
 	p.ready.Store(true)
-	p.log.Info("runtime synchronised, plugin is ready")
+	p.log.Info("runtime synchronised, plugin is ready", "pods", len(pods), "containers", len(ctrs))
+
+	// Off the hot path: this does one API lookup per namespace and must not hold
+	// up the handshake that makes us ready for new containers.
+	p.verifyWG.Add(1)
+	go func() {
+		defer p.verifyWG.Done()
+		p.reportMissedContainers(pods, ctrs)
+	}()
+
 	return nil, nil
+}
+
+// reportMissedContainers counts running containers that are opted in but carry no
+// hook.done breadcrumb — they were created while the plugin was disconnected
+// (node boot, containerd restart, DaemonSet rollout) and never got the CA bundle.
+func (p *Plugin) reportMissedContainers(pods []*api.PodSandbox, ctrs []*api.Container) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	byID := make(map[string]*api.PodSandbox, len(pods))
+	for _, pod := range pods {
+		byID[pod.GetId()] = pod
+	}
+
+	missed := 0
+	for _, ctr := range ctrs {
+		select {
+		case <-p.stopCh:
+			return
+		case <-ctx.Done():
+			p.log.Warn("missed-container scan timed out", "scanned_so_far", missed)
+			return
+		default:
+		}
+
+		if ctr.GetState() != api.ContainerState_CONTAINER_RUNNING {
+			continue
+		}
+		pod, ok := byID[ctr.GetPodSandboxId()]
+		if !ok {
+			continue
+		}
+		if !decide(ctx, pod, p.nsCache).inject || isContainerExcluded(pod, ctr) {
+			continue
+		}
+
+		key, err := containerCAKey(ctr)
+		if err != nil {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(dynamicCARoot(), key, config.BreadcrumbDone)); err == nil {
+			continue // we injected this one in a previous life
+		}
+
+		missed++
+		p.log.Warn("missed injection: container was created while the plugin was not connected — "+
+			"it has no CA bundle and needs a restart",
+			"namespace", pod.GetNamespace(),
+			"pod", pod.GetName(),
+			"container", ctr.GetName(),
+			"container_id", shortID(ctr),
+		)
+	}
+
+	p.metrics.MissedContainers.Set(float64(missed))
+	if missed > 0 {
+		p.log.Warn("missed injection summary: restart these pods to pick up the CA bundle",
+			"missed_containers", missed, "running_containers", len(ctrs))
+	}
 }

@@ -31,6 +31,42 @@ spec:
           annotations:
             summary: "cainjekt DaemonSet has unavailable pods"
             description: "Not all cainjekt pods are ready for more than 10 minutes"
+        - alert: CainjektNamespaceLookupFailing
+          expr: |
+            rate(cainjekt_ns_lookup_skipped_total[5m]) > 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "cainjekt cannot determine opt-in for new containers"
+            description: >-
+              Namespace label lookups are failing on {{ `{{ $labels.instance }}` }}, so containers are
+              starting without a CA bundle even though their namespace may be opted in. Usually the API
+              server is unreachable from the node (CNI/CoreDNS not yet converged after a node image
+              update) or the service account token expired. Affected pods need a restart.
+        - alert: CainjektMissedContainers
+          expr: |
+            cainjekt_missed_containers > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "cainjekt found running containers it never injected"
+            description: >-
+              {{ `{{ $value }}` }} opted-in container(s) on {{ `{{ $labels.instance }}` }} were created
+              while the plugin was disconnected and have no CA bundle. They cannot be fixed in place —
+              restart the pods. The cainjekt pod log lists them by namespace and name.
+        - alert: CainjektHookIncomplete
+          expr: |
+            increase(cainjekt_hook_incomplete_total[15m]) > 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "cainjekt OCI hooks are not completing"
+            description: >-
+              Hooks on {{ `{{ $labels.instance }}` }} started but did not finish, leaving trust stores
+              unpatched. Usually the hook was SIGKILLed on timeout — raise CAINJEKT_HOOK_TIMEOUT_SEC.
         - alert: CainjektOrphanAccumulation
           expr: |
             increase(cainjekt_orphans_cleaned_total[1h]) > 50
