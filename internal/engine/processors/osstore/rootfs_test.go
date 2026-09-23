@@ -8,6 +8,7 @@ import (
 	"time"
 
 	hookapi "github.com/natrontech/cainjekt/internal/engine/api"
+	"github.com/natrontech/cainjekt/internal/util/containerfs"
 )
 
 // TestIsRootfsWritableRefusesSymlink pins that the writability probe does not
@@ -27,7 +28,7 @@ func TestIsRootfsWritableRefusesSymlink(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_ = isRootfsWritable(rootfs)
+	_ = containerfs.Writable(rootfs)
 
 	got, err := os.ReadFile(host)
 	if err != nil {
@@ -42,7 +43,7 @@ func TestIsRootfsWritableRefusesSymlink(t *testing.T) {
 // writable rootfs with no planted probe must still report writable.
 func TestIsRootfsWritableTrueOnCleanRootfs(t *testing.T) {
 	rootfs := t.TempDir()
-	if !isRootfsWritable(rootfs) {
+	if !containerfs.Writable(rootfs) {
 		t.Fatal("expected a writable rootfs to report writable")
 	}
 	if _, err := os.Lstat(filepath.Join(rootfs, ".cainjekt-probe")); !os.IsNotExist(err) {

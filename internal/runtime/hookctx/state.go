@@ -5,14 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
+	"path"
 	"strings"
 	"time"
 
 	"github.com/natrontech/cainjekt/internal/config"
 	hookapi "github.com/natrontech/cainjekt/internal/engine/api"
 	"github.com/natrontech/cainjekt/internal/util/containerfs"
-	"github.com/natrontech/cainjekt/pkg/fsx"
 )
 
 // DetectedProcessor records a processor's detection result for persistence.
@@ -82,35 +81,19 @@ func (s State) ToHookContext() *hookapi.Context {
 // Write persists the hook state and a human-readable status file to the container rootfs.
 func Write(rootfs string, state State) error {
 	containerPath := contextFilePath()
-	hostPath, err := resolveInRootfs(rootfs, containerPath)
-	if err != nil {
-		return fmt.Errorf("failed to resolve hook context path %s: %w", containerPath, err)
-	}
-	dir := filepath.Dir(hostPath)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("failed to create hook context dir %s: %w", dir, err)
-	}
 	b, err := json.Marshal(state)
 	if err != nil {
 		return fmt.Errorf("failed to marshal hook context: %w", err)
 	}
-	if err := fsx.AtomicWrite(hostPath, append(b, '\n'), fsx.WriteOptions{
-		FallbackMode:  0o644,
-		RefuseSymlink: true,
-		PreserveOwner: true,
-	}); err != nil {
-		return fmt.Errorf("failed to write hook context file %s: %w", hostPath, err)
+	resolved, err := containerfs.WriteFile(rootfs, containerPath, append(b, '\n'))
+	if err != nil {
+		return fmt.Errorf("failed to write hook context file: %w", err)
 	}
 
 	// Write human-readable status file for operator inspection.
-	statusPath := filepath.Join(dir, "status.json")
-	status := buildStatus(state)
-	sb, err := json.MarshalIndent(status, "", "  ")
+	sb, err := json.MarshalIndent(buildStatus(state), "", "  ")
 	if err == nil {
-		_ = fsx.AtomicWrite(statusPath, append(sb, '\n'), fsx.WriteOptions{
-			FallbackMode:  0o644,
-			RefuseSymlink: true,
-		})
+		_, _ = containerfs.WriteFile(rootfs, path.Join(path.Dir(resolved), "status.json"), append(sb, '\n'))
 	}
 
 	return nil
@@ -164,7 +147,9 @@ func buildStatus(state State) InjectionStatus {
 // Read loads the persisted hook state from the container filesystem.
 func Read() (State, error) {
 	p := contextFilePath()
-	b, err := os.ReadFile(p)
+	// Runs in the wrapper, inside the container: this is the container's own
+	// filesystem, not an untrusted rootfs seen from the host.
+	b, err := os.ReadFile(p) //nolint:forbidigo // wrapper reads its own filesystem
 	if err != nil {
 		if os.IsNotExist(err) {
 			return State{}, nil
@@ -189,19 +174,6 @@ func contextFilePath() string {
 		return p
 	}
 	return config.HookContextFile
-}
-
-// resolveInRootfs maps a container-absolute path onto the host, following symlinks
-// within the rootfs only. The hook writes into a root filesystem that comes from
-// the container image, so a plain filepath.Join would follow a symlinked path
-// component out of the rootfs. AtomicWrite's RefuseSymlink does not cover this:
-// it checks the final component, not the parent directories.
-func resolveInRootfs(rootfs, containerPath string) (string, error) {
-	resolved, err := containerfs.ResolveSymlinks(rootfs, containerPath)
-	if err != nil {
-		return "", err
-	}
-	return containerfs.PathInRootfs(rootfs, resolved), nil
 }
 
 func cloneStringMap(in map[string]string) map[string]string {

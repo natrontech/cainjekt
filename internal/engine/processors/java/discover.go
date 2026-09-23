@@ -1,9 +1,7 @@
 package java
 
 import (
-	"os"
 	"path"
-	"path/filepath"
 	"strings"
 
 	"github.com/natrontech/cainjekt/internal/util/containerfs"
@@ -41,12 +39,6 @@ var distroTrustStores = []string{
 	"/etc/ssl/certs/java/cacerts", // Debian / Ubuntu, written by ca-certificates-java
 }
 
-// trustStore is a cacerts file located inside a container rootfs.
-type trustStore struct {
-	container string // path as the container sees it
-	host      string // path on the host, inside the rootfs
-}
-
 // javaHomes returns candidate java home directories as container paths.
 func javaHomes(rootfs string, env []string) []string {
 	var out []string
@@ -54,12 +46,8 @@ func javaHomes(rootfs string, env []string) []string {
 		out = append(out, path.Clean(home))
 	}
 	for _, bin := range javaBinaryCandidates {
-		resolved, err := containerfs.ResolveSymlinks(rootfs, bin)
-		if err != nil {
-			continue
-		}
-		fi, err := os.Lstat(containerfs.PathInRootfs(rootfs, resolved))
-		if err != nil || !fi.Mode().IsRegular() {
+		resolved, ok := containerfs.RegularFile(rootfs, bin)
+		if !ok {
 			continue
 		}
 		// <home>/bin/java
@@ -68,9 +56,9 @@ func javaHomes(rootfs string, env []string) []string {
 	return out
 }
 
-// discoverTrustStores returns every existing cacerts file in the rootfs,
-// deduplicated by the path it finally resolves to.
-func discoverTrustStores(rootfs string, env []string) []trustStore {
+// discoverTrustStores returns the resolved container path of every cacerts
+// file in the rootfs, deduplicated.
+func discoverTrustStores(rootfs string, env []string) []string {
 	candidates := make([]string, 0, 16)
 	for _, home := range javaHomes(rootfs, env) {
 		candidates = append(candidates,
@@ -80,36 +68,21 @@ func discoverTrustStores(rootfs string, env []string) []trustStore {
 	}
 	candidates = append(candidates, distroTrustStores...)
 	for _, glob := range trustStoreGlobs {
-		matches, err := filepath.Glob(filepath.Join(rootfs, glob))
-		if err != nil {
-			continue
-		}
-		for _, m := range matches {
-			rel, err := filepath.Rel(rootfs, m)
-			if err != nil {
-				continue
-			}
-			candidates = append(candidates, "/"+filepath.ToSlash(rel))
-		}
+		candidates = append(candidates, containerfs.Glob(rootfs, glob)...)
 	}
 
 	seen := make(map[string]struct{}, len(candidates))
-	var out []trustStore
+	var out []string
 	for _, c := range candidates {
-		resolved, err := containerfs.ResolveSymlinks(rootfs, c)
-		if err != nil {
+		resolved, ok := containerfs.RegularFile(rootfs, c)
+		if !ok {
 			continue
 		}
 		if _, dup := seen[resolved]; dup {
 			continue
 		}
 		seen[resolved] = struct{}{}
-		host := containerfs.PathInRootfs(rootfs, resolved)
-		fi, err := os.Lstat(host)
-		if err != nil || !fi.Mode().IsRegular() {
-			continue
-		}
-		out = append(out, trustStore{container: resolved, host: host})
+		out = append(out, resolved)
 	}
 	return out
 }

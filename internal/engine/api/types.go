@@ -1,7 +1,14 @@
 // Package api defines the processor interfaces and types for cainjekt's engine.
 package api
 
-import "strings"
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/natrontech/cainjekt/pkg/fsx"
+)
 
 // FactKey identifies a piece of detection metadata stored during processing.
 type FactKey string
@@ -133,4 +140,35 @@ type Context struct {
 // AddResult appends a processor outcome to the context.
 func (c *Context) AddResult(r ProcessorResult) {
 	c.Results = append(c.Results, r)
+}
+
+// ReadCABundle reads the organisation CA bundle staged by the NRI plugin. It
+// is a host path the plugin wrote, not part of the container rootfs.
+func (c *Context) ReadCABundle() ([]byte, error) {
+	b, err := os.ReadFile(c.CAFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read CA bundle file %s: %w", c.CAFile, err)
+	}
+	return b, nil
+}
+
+// StageFile writes name into the per-container staging directory on the host
+// (the directory holding CAFile) and returns its path. Used when the rootfs
+// cannot be modified in place.
+func (c *Context) StageFile(name string, data []byte) (string, error) {
+	if strings.TrimSpace(c.CAFile) == "" {
+		return "", fmt.Errorf("cannot stage %s: no CA file path", name)
+	}
+	if name != filepath.Base(name) {
+		return "", fmt.Errorf("cannot stage %s: not a plain file name", name)
+	}
+	target := filepath.Join(filepath.Dir(c.CAFile), name)
+	if err := fsx.AtomicWrite(target, data, fsx.WriteOptions{
+		FallbackMode:  0o644,
+		RefuseSymlink: true,
+		PreserveOwner: true,
+	}); err != nil {
+		return "", fmt.Errorf("failed to stage %s: %w", target, err)
+	}
+	return target, nil
 }

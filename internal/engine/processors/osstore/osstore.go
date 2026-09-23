@@ -9,14 +9,11 @@ import (
 	"io"
 	"os"
 	"path"
-	"path/filepath"
 	"strings"
-	"syscall"
 
 	hookapi "github.com/natrontech/cainjekt/internal/engine/api"
 	"github.com/natrontech/cainjekt/internal/util/containerfs"
 	"github.com/natrontech/cainjekt/pkg/certs"
-	"github.com/natrontech/cainjekt/pkg/fsx"
 )
 
 const (
@@ -145,27 +142,27 @@ func (p *processor) Apply(ctx *hookapi.Context) error {
 		return nil
 	}
 
-	orgCA, err := os.ReadFile(ctx.CAFile)
+	orgCA, err := ctx.ReadCABundle()
 	if err != nil {
-		return fmt.Errorf("failed to read CA bundle file %s: %w", ctx.CAFile, err)
+		return err
 	}
 
-	targetHost, targetContainer, err := detectTrustStorePath(ctx.Rootfs, p.candidates)
+	target, err := detectTrustStorePath(ctx.Rootfs, p.candidates)
 	if err != nil {
 		return err
 	}
 
 	// Check if rootfs is writable before attempting modifications.
-	if !isRootfsWritable(ctx.Rootfs) {
+	if !containerfs.Writable(ctx.Rootfs) {
 		ctx.Facts.Set(hookapi.FactRootfsReadOnly, "true")
-		ctx.Facts.Set(hookapi.FactTrustStorePath, targetContainer)
+		ctx.Facts.Set(hookapi.FactTrustStorePath, target)
 		ctx.Facts.Set(hookapi.FactDistro, p.distro)
 		// Use the dynamic CA file directly — it's on a host-mounted writable path.
 		if ctx.CAFile != "" {
 			ctx.Facts.Set(hookapi.FactIndividualCAPath, ctx.CAFile)
 			// The store can't be merged in place; stage the merged bundle beside
 			// the dynamic CA file instead.
-			mergedPath, err := stageMergedCA(targetHost, filepath.Dir(ctx.CAFile), orgCA)
+			mergedPath, err := stageMergedCA(ctx, target, orgCA)
 			if err != nil {
 				return err
 			}
@@ -176,9 +173,9 @@ func (p *processor) Apply(ctx *hookapi.Context) error {
 		return nil
 	}
 
-	current, err := containerfs.ReadRegularFile(targetHost)
+	current, _, err := containerfs.ReadFile(ctx.Rootfs, target)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("failed to read trust store %s: %w", targetHost, err)
+		return fmt.Errorf("failed to read trust store %s: %w", target, err)
 	}
 
 	merged, err := certs.MergePEM(current, orgCA)
@@ -187,31 +184,13 @@ func (p *processor) Apply(ctx *hookapi.Context) error {
 	}
 
 	if merged.Added > 0 {
-		if err := os.MkdirAll(filepath.Dir(targetHost), 0o755); err != nil {
-			return fmt.Errorf("failed to create trust store directory %s: %w", filepath.Dir(targetHost), err)
-		}
-		if err := fsx.AtomicWrite(targetHost, merged.Merged, fsx.WriteOptions{
-			FallbackMode:  0o644,
-			RefuseSymlink: true,
-			PreserveOwner: true,
-		}); err != nil {
-			return fmt.Errorf("failed to write trust store %s: %w", targetHost, err)
+		if _, err := containerfs.WriteFile(ctx.Rootfs, target, merged.Merged); err != nil {
+			return fmt.Errorf("failed to write trust store: %w", err)
 		}
 		// Alpine images often use /etc/ssl/cert.pem as curl/OpenSSL default.
 		if p.distro == "alpine" {
-			altHost, _, err := resolveContainerPath(ctx.Rootfs, "/etc/ssl/cert.pem")
-			if err != nil {
-				return fmt.Errorf("failed to resolve alpine cert path %s: %w", "/etc/ssl/cert.pem", err)
-			}
-			if err := os.MkdirAll(filepath.Dir(altHost), 0o755); err != nil {
-				return fmt.Errorf("failed to create alpine cert path %s: %w", filepath.Dir(altHost), err)
-			}
-			if err := fsx.AtomicWrite(altHost, merged.Merged, fsx.WriteOptions{
-				FallbackMode:  0o644,
-				RefuseSymlink: true,
-				PreserveOwner: true,
-			}); err != nil {
-				return fmt.Errorf("failed to write alpine default cert path %s: %w", altHost, err)
+			if _, err := containerfs.WriteFile(ctx.Rootfs, "/etc/ssl/cert.pem", merged.Merged); err != nil {
+				return fmt.Errorf("failed to write alpine default cert path: %w", err)
 			}
 		}
 	}
@@ -221,11 +200,11 @@ func (p *processor) Apply(ctx *hookapi.Context) error {
 		return err
 	}
 
-	ctx.Facts.Set(hookapi.FactTrustStorePath, targetContainer)
+	ctx.Facts.Set(hookapi.FactTrustStorePath, target)
 	ctx.Facts.Set(hookapi.FactTrustStoreKind, "bundle")
 	ctx.Facts.Set(hookapi.FactDistro, p.distro)
 	// The in-place merged store doubles as the bundle for trust-replacing env vars.
-	ctx.Facts.Set(hookapi.FactMergedCAPath, targetContainer)
+	ctx.Facts.Set(hookapi.FactMergedCAPath, target)
 	if individualCAPath != "" {
 		ctx.Facts.Set(hookapi.FactIndividualCAPath, individualCAPath)
 	}
@@ -240,26 +219,18 @@ func trustStoreConfigured(ctx *hookapi.Context) bool {
 	return ok && strings.TrimSpace(v) != ""
 }
 
-func detectTrustStorePath(rootfs string, candidates []string) (hostPath, containerPath string, err error) {
-	for _, p := range candidates {
-		host, resolved, resolveErr := resolveContainerPath(rootfs, p)
-		if resolveErr != nil {
-			continue
-		}
-		fi, statErr := os.Stat(host)
-		if statErr == nil && fi.Mode().IsRegular() {
-			return host, resolved, nil
+// detectTrustStorePath returns the resolved container path of the first
+// candidate that is a regular file, else of the first candidate.
+func detectTrustStorePath(rootfs string, candidates []string) (string, error) {
+	for _, c := range candidates {
+		if resolved, ok := containerfs.RegularFile(rootfs, c); ok {
+			return resolved, nil
 		}
 	}
-
 	if len(candidates) > 0 {
-		host, resolved, resolveErr := resolveContainerPath(rootfs, candidates[0])
-		if resolveErr != nil {
-			return "", "", resolveErr
-		}
-		return host, resolved, nil
+		return containerfs.ResolveSymlinks(rootfs, candidates[0])
 	}
-	return "", "", errors.New("no known trust store path found in rootfs")
+	return "", errors.New("no known trust store path found in rootfs")
 }
 
 type osRelease struct {
@@ -268,28 +239,20 @@ type osRelease struct {
 }
 
 func readOSRelease(rootfs string) (osRelease, error) {
-	// Resolve within the rootfs: the image is untrusted, and a symlinked
-	// /etc/os-release must not redirect this read at a file on the node.
-	candidates := make([]string, 0, 2)
 	for _, c := range []string{"/etc/os-release", "/usr/lib/os-release"} {
-		if resolved, err := containerfs.ResolveSymlinks(rootfs, c); err == nil {
-			candidates = append(candidates, containerfs.PathInRootfs(rootfs, resolved))
-		}
-	}
-	for _, p := range candidates {
-		b, err := containerfs.ReadRegularFile(p)
+		b, resolved, err := containerfs.ReadFile(rootfs, c)
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				continue
 			}
-			return osRelease{}, fmt.Errorf("failed to read os-release %s: %w", p, err)
+			return osRelease{}, fmt.Errorf("failed to read os-release %s: %w", c, err)
 		}
 		info, err := parseOSRelease(bytes.NewReader(b))
 		if err != nil {
-			return osRelease{}, fmt.Errorf("failed to parse os-release %s: %w", p, err)
+			return osRelease{}, fmt.Errorf("failed to parse os-release %s: %w", resolved, err)
 		}
 		if info.id == "" {
-			return osRelease{}, fmt.Errorf("os-release %s has empty ID", p)
+			return osRelease{}, fmt.Errorf("os-release %s has empty ID", resolved)
 		}
 		return info, nil
 	}
@@ -330,60 +293,33 @@ func normalizeOSReleaseValue(v string) string {
 	return strings.TrimSpace(v)
 }
 
-// stageMergedCA writes <system store + org CA> into destDir (the writable
-// per-container dynamic CA dir) and returns the staged path. Returns "" when the
-// rootfs has no store to merge with — callers then fall back to the individual CA.
-func stageMergedCA(storeHostPath, destDir string, orgCA []byte) (string, error) {
-	current, err := containerfs.ReadRegularFile(storeHostPath)
+// stageMergedCA writes <system store + org CA> into the per-container staging
+// dir on the host and returns the staged path. Returns "" when the rootfs has no
+// store to merge with — callers then fall back to the individual CA.
+func stageMergedCA(ctx *hookapi.Context, store string, orgCA []byte) (string, error) {
+	current, _, err := containerfs.ReadFile(ctx.Rootfs, store)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return "", nil
 		}
-		return "", fmt.Errorf("failed to read trust store %s: %w", storeHostPath, err)
+		return "", fmt.Errorf("failed to read trust store %s: %w", store, err)
 	}
 	merged, err := certs.MergePEM(current, orgCA)
 	if err != nil {
 		return "", err
 	}
-	target := filepath.Join(destDir, mergedCAFileName)
-	if err := fsx.AtomicWrite(target, merged.Merged, fsx.WriteOptions{
-		FallbackMode:  0o644,
-		RefuseSymlink: true,
-		PreserveOwner: true,
-	}); err != nil {
-		return "", fmt.Errorf("failed to write merged CA bundle %s: %w", target, err)
-	}
-	return target, nil
+	return ctx.StageFile(mergedCAFileName, merged.Merged)
 }
 
 func writeIndividualCA(rootfs, anchorDir string, content []byte) (string, error) {
 	if anchorDir == "" {
 		return "", nil
 	}
-	targetContainer := path.Join(anchorDir, individualCAFileName)
-	targetHost, resolvedContainer, err := resolveContainerPath(rootfs, targetContainer)
+	resolved, err := containerfs.WriteFile(rootfs, path.Join(anchorDir, individualCAFileName), content)
 	if err != nil {
-		return "", fmt.Errorf("failed to resolve individual CA path %s: %w", targetContainer, err)
+		return "", fmt.Errorf("failed to write individual CA file: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(targetHost), 0o755); err != nil {
-		return "", fmt.Errorf("failed to create individual CA directory %s: %w", filepath.Dir(targetHost), err)
-	}
-	if err := fsx.AtomicWrite(targetHost, content, fsx.WriteOptions{
-		FallbackMode:  0o644,
-		RefuseSymlink: true,
-		PreserveOwner: true,
-	}); err != nil {
-		return "", fmt.Errorf("failed to write individual CA file %s: %w", resolvedContainer, err)
-	}
-	return resolvedContainer, nil
-}
-
-func resolveContainerPath(rootfs, containerPath string) (hostPath, resolvedContainerPath string, err error) {
-	resolved, err := containerfs.ResolveSymlinks(rootfs, containerPath)
-	if err != nil {
-		return "", "", err
-	}
-	return containerfs.PathInRootfs(rootfs, resolved), resolved, nil
+	return resolved, nil
 }
 
 func (p *processor) matches(info osRelease) bool {
@@ -402,17 +338,4 @@ func (p *processor) matches(info osRelease) bool {
 		}
 	}
 	return false
-}
-
-func isRootfsWritable(rootfs string) bool {
-	probe := filepath.Join(rootfs, ".cainjekt-probe")
-	// O_NOFOLLOW|O_EXCL: the probe path is inside an untrusted rootfs, so never
-	// follow or reuse an existing entry there; fail closed as "not writable".
-	f, err := os.OpenFile(probe, os.O_CREATE|os.O_EXCL|os.O_WRONLY|syscall.O_NOFOLLOW, 0o600)
-	if err != nil {
-		return false
-	}
-	_ = f.Close()
-	_ = os.Remove(probe)
-	return true
 }

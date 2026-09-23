@@ -137,6 +137,49 @@ annotations:
 
 ## Security Model
 
+### Threat Model
+
+This section is the definition of "secure" for cainjekt. A security review
+checks a change against it; a finding it does not cover means the model is
+updated first, then the code.
+
+**Attacker.** Anyone who can create a pod on an injected node. They control the
+image completely (every file, symlink, FIFO and device node in the rootfs), the
+pod annotations, and the container's command and environment. They cannot
+change the plugin configuration, the CA bundle ConfigMap or the node.
+
+**Where untrusted input meets privilege.**
+
+| Component | Runs as | Untrusted input |
+|-----------|---------|-----------------|
+| NRI plugin | uid 0, no capabilities, DaemonSet pod | pod annotations and labels, namespace labels |
+| OCI hook | root on the host, outside the container's device cgroup | the container rootfs, OCI state annotations, spec env (`JAVA_HOME`) |
+| Wrapper | the container's user, inside the container | `hook-context.json` (the container can write it) |
+
+The OCI hook is the high-risk part: root on the node, reading a filesystem the
+attacker built.
+
+**Invariants.** Each has one choke point and a test, so it cannot be broken by
+accident in a new code path.
+
+| Invariant | Enforced by | Tested by |
+|-----------|-------------|-----------|
+| The hook never reads or writes outside the rootfs, except the per-container staging dir | `containerfs` resolves every path with links re-anchored inside the rootfs; `Context.StageFile` for the staging dir. The `forbidigo` lint bans raw `os`/`filepath`/`fsx` file calls in `engine/processors`, `runtime/hook` and `runtime/hookctx` | `TestHostileRootfs` (every registered processor), `FuzzResolveSymlinks` |
+| The hook reads only regular files of at most 16 MiB from the rootfs (no FIFOs, device nodes, unbounded reads) | `containerfs.ReadRegularFile` | `TestHostileRootfs`, `TestReadRegularFile*` |
+| cainjekt never blocks a container from starting | fail-open processors and wrapper; hook timeout | `TestHostileRootfs` (no hang), E2E |
+| Annotations only select processors and containers; they never become paths, commands or env values | review | — |
+| The plugin pod has no privilege beyond uid 0 for the NRI socket and `/run/cainjekt` | chart `securityContext`, RBAC limited to `get namespaces` | E2E Helm test runs the defaults |
+
+**Assumptions.** No process runs in the container while the CreateRuntime hook
+runs, so the rootfs cannot change between resolving a path and using it (which
+is why the hook does not need `openat`-style resolution everywhere). containerd,
+the node and the CA bundle ConfigMap are trusted.
+
+**When a change needs a security review.** When it adds or changes a hook-phase
+file access or a processor, reads a new annotation or env var, adds a host
+path, or changes the chart's `securityContext`, volumes or RBAC. Other changes
+do not.
+
 ### Privileges
 
 The DaemonSet runs with `privileged: true`. This is required because:

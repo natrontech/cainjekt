@@ -6,16 +6,12 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/pem"
-	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
 	hookapi "github.com/natrontech/cainjekt/internal/engine/api"
 	"github.com/natrontech/cainjekt/internal/util/containerfs"
 	"github.com/natrontech/cainjekt/internal/util/envutil"
-	"github.com/natrontech/cainjekt/pkg/fsx"
 	"github.com/natrontech/cainjekt/pkg/javakeystore"
 )
 
@@ -62,7 +58,7 @@ func (p *processor) Apply(ctx *hookapi.Context) error {
 	if ctx == nil {
 		return nil
 	}
-	orgCerts, err := readPEMCerts(ctx.CAFile)
+	orgCerts, err := readPEMCerts(ctx)
 	if err != nil {
 		return err
 	}
@@ -82,23 +78,19 @@ func (p *processor) Apply(ctx *hookapi.Context) error {
 		lastErr     error
 	)
 	for _, s := range stores {
-		merged, format, err := mergeStore(s.host, orgCerts)
+		merged, format, err := mergeStore(ctx.Rootfs, s, orgCerts)
 		if err != nil {
-			lastErr = fmt.Errorf("trust store %s: %w", s.container, err)
+			lastErr = fmt.Errorf("trust store %s: %w", s, err)
 			continue
 		}
 		if merged == nil {
 			patched++ // CA already trusted, nothing to rewrite
 			continue
 		}
-		if err := fsx.AtomicWrite(s.host, merged, fsx.WriteOptions{
-			FallbackMode:  0o644,
-			RefuseSymlink: true,
-			PreserveOwner: true,
-		}); err != nil {
+		if _, err := containerfs.WriteFile(ctx.Rootfs, s, merged); err != nil {
 			// Read-only rootfs, or a path we may not replace. Keep the merged
 			// store so it can be staged outside the rootfs instead.
-			lastErr = fmt.Errorf("trust store %s: %w", s.container, err)
+			lastErr = fmt.Errorf("trust store %s: %w", s, err)
 			if pending == nil {
 				pending, pendingKind = merged, format
 			}
@@ -150,8 +142,8 @@ func (p *processor) ApplyWrapper(ctx *hookapi.Context) error {
 
 // mergeStore returns the re-encoded trust store with the missing certificates
 // added, or nil when they are all trusted already.
-func mergeStore(hostPath string, add []*x509.Certificate) ([]byte, javakeystore.Format, error) {
-	data, err := containerfs.ReadRegularFile(hostPath)
+func mergeStore(rootfs, store string, add []*x509.Certificate) ([]byte, javakeystore.Format, error) {
+	data, _, err := containerfs.ReadFile(rootfs, store)
 	if err != nil {
 		return nil, javakeystore.FormatUnknown, fmt.Errorf("failed to read trust store: %w", err)
 	}
@@ -188,24 +180,17 @@ func mergeStore(hostPath string, add []*x509.Certificate) ([]byte, javakeystore.
 }
 
 func stageTrustStore(ctx *hookapi.Context, data []byte, format javakeystore.Format) (string, error) {
-	if strings.TrimSpace(ctx.CAFile) == "" {
-		return "", errors.New("cannot stage java trust store: no CA file path")
+	staged, err := ctx.StageFile(stagedStoreName, data)
+	if err != nil {
+		return "", fmt.Errorf("failed to stage java trust store (%s): %w", format, err)
 	}
-	target := filepath.Join(filepath.Dir(ctx.CAFile), stagedStoreName)
-	if err := fsx.AtomicWrite(target, data, fsx.WriteOptions{
-		FallbackMode:  0o644,
-		RefuseSymlink: true,
-		PreserveOwner: true,
-	}); err != nil {
-		return "", fmt.Errorf("failed to stage java trust store %s (%s): %w", target, format, err)
-	}
-	return target, nil
+	return staged, nil
 }
 
-func readPEMCerts(pemPath string) ([]*x509.Certificate, error) {
-	data, err := os.ReadFile(pemPath)
+func readPEMCerts(ctx *hookapi.Context) ([]*x509.Certificate, error) {
+	data, err := ctx.ReadCABundle()
 	if err != nil {
-		return nil, fmt.Errorf("failed to read CA bundle file %s: %w", pemPath, err)
+		return nil, err
 	}
 	var out []*x509.Certificate
 	rest := data
@@ -220,7 +205,7 @@ func readPEMCerts(pemPath string) ([]*x509.Certificate, error) {
 		}
 		cert, err := x509.ParseCertificate(block.Bytes)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse certificate in %s: %w", pemPath, err)
+			return nil, fmt.Errorf("failed to parse certificate in %s: %w", ctx.CAFile, err)
 		}
 		out = append(out, cert)
 	}

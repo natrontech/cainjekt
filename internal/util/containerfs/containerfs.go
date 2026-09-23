@@ -5,11 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
 	"syscall"
+
+	"github.com/natrontech/cainjekt/pkg/fsx"
 )
 
 // MaxReadSize caps reads of files that come from a container image. Real trust
@@ -70,12 +73,7 @@ func PathInRootfs(rootfs, containerPath string) string {
 // /usr/bin/java -> /etc/alternatives/java) never escape to the host filesystem.
 func HasAnyRegularFile(rootfs string, containerPaths []string) bool {
 	for _, containerPath := range containerPaths {
-		resolved, err := ResolveSymlinks(rootfs, containerPath)
-		if err != nil {
-			continue
-		}
-		fi, err := os.Lstat(PathInRootfs(rootfs, resolved))
-		if err == nil && fi.Mode().IsRegular() {
+		if _, ok := RegularFile(rootfs, containerPath); ok {
 			return true
 		}
 	}
@@ -144,4 +142,90 @@ func splitContainerPath(p string) []string {
 		return nil
 	}
 	return strings.Split(strings.TrimPrefix(clean, "/"), "/")
+}
+
+// The functions below are the only way hook-phase code touches a container
+// rootfs (enforced by forbidigo in .golangci.yml). They take container paths,
+// resolve them with ResolveSymlinks, and apply the rules of the threat model in
+// docs/architecture.md: never leave the rootfs, read only bounded regular files,
+// never replace a symlink.
+
+// RegularFile reports whether containerPath resolves to a regular file in the
+// rootfs, and returns the resolved container path.
+func RegularFile(rootfs, containerPath string) (string, bool) {
+	resolved, err := ResolveSymlinks(rootfs, containerPath)
+	if err != nil {
+		return "", false
+	}
+	fi, err := os.Lstat(PathInRootfs(rootfs, resolved))
+	return resolved, err == nil && fi.Mode().IsRegular()
+}
+
+// ReadFile reads containerPath from the rootfs (see ReadRegularFile) and
+// returns the resolved container path. A missing file returns an error
+// wrapping os.ErrNotExist.
+func ReadFile(rootfs, containerPath string) ([]byte, string, error) {
+	resolved, err := ResolveSymlinks(rootfs, containerPath)
+	if err != nil {
+		return nil, "", err
+	}
+	data, err := ReadRegularFile(PathInRootfs(rootfs, resolved))
+	return data, resolved, err
+}
+
+// WriteFile atomically replaces containerPath in the rootfs, creating missing
+// parent directories, and returns the resolved container path. It refuses to
+// replace a symlink and keeps the existing file's mode and owner.
+func WriteFile(rootfs, containerPath string, data []byte) (string, error) {
+	resolved, err := ResolveSymlinks(rootfs, containerPath)
+	if err != nil {
+		return "", err
+	}
+	host := PathInRootfs(rootfs, resolved)
+	if err := os.MkdirAll(filepath.Dir(host), 0o755); err != nil {
+		return "", fmt.Errorf("failed to create directory for %s: %w", resolved, err)
+	}
+	if err := fsx.AtomicWrite(host, data, fsx.WriteOptions{
+		FallbackMode:  0o644,
+		RefuseSymlink: true,
+		PreserveOwner: true,
+	}); err != nil {
+		return "", fmt.Errorf("failed to write %s: %w", resolved, err)
+	}
+	return resolved, nil
+}
+
+// Glob returns the container paths matching a rootfs-relative pattern (no
+// leading slash). Matching runs on an os.Root, so a link that points out of
+// the rootfs is not followed; absolute links are not followed either, callers
+// that need them list the resolved path explicitly.
+func Glob(rootfs, pattern string) []string {
+	root, err := os.OpenRoot(rootfs)
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = root.Close() }()
+	matches, err := fs.Glob(root.FS(), pattern)
+	if err != nil {
+		return nil
+	}
+	out := make([]string, 0, len(matches))
+	for _, m := range matches {
+		out = append(out, "/"+m)
+	}
+	return out
+}
+
+// Writable reports whether files can be created at the rootfs top level.
+func Writable(rootfs string) bool {
+	probe := filepath.Join(rootfs, ".cainjekt-probe")
+	// O_NOFOLLOW|O_EXCL: never follow or reuse an existing entry; fail closed
+	// as "not writable".
+	f, err := os.OpenFile(probe, os.O_CREATE|os.O_EXCL|os.O_WRONLY|syscall.O_NOFOLLOW, 0o600)
+	if err != nil {
+		return false
+	}
+	_ = f.Close()
+	_ = os.Remove(probe)
+	return true
 }
