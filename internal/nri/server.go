@@ -3,6 +3,7 @@ package nri
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -23,7 +24,7 @@ func newHTTPServer(addr string, metrics *Metrics, isReady func() bool) *http.Ser
 		_, _ = fmt.Fprint(w, "ok")
 	})
 	mux.Handle("GET /metrics", promhttp.HandlerFor(metrics.Registry, promhttp.HandlerOpts{}))
-	return &http.Server{Addr: addr, Handler: mux}
+	return &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
 }
 
 func handleHealth(w http.ResponseWriter, _ *http.Request) {
