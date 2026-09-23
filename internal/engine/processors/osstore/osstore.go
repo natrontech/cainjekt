@@ -3,6 +3,7 @@ package osstore
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -175,7 +176,7 @@ func (p *processor) Apply(ctx *hookapi.Context) error {
 		return nil
 	}
 
-	current, err := os.ReadFile(targetHost)
+	current, err := containerfs.ReadRegularFile(targetHost)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("failed to read trust store %s: %w", targetHost, err)
 	}
@@ -276,15 +277,14 @@ func readOSRelease(rootfs string) (osRelease, error) {
 		}
 	}
 	for _, p := range candidates {
-		f, err := os.Open(p)
+		b, err := containerfs.ReadRegularFile(p)
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				continue
 			}
-			return osRelease{}, fmt.Errorf("failed to open os-release %s: %w", p, err)
+			return osRelease{}, fmt.Errorf("failed to read os-release %s: %w", p, err)
 		}
-		info, err := parseOSRelease(f)
-		_ = f.Close()
+		info, err := parseOSRelease(bytes.NewReader(b))
 		if err != nil {
 			return osRelease{}, fmt.Errorf("failed to parse os-release %s: %w", p, err)
 		}
@@ -334,7 +334,7 @@ func normalizeOSReleaseValue(v string) string {
 // per-container dynamic CA dir) and returns the staged path. Returns "" when the
 // rootfs has no store to merge with — callers then fall back to the individual CA.
 func stageMergedCA(storeHostPath, destDir string, orgCA []byte) (string, error) {
-	current, err := os.ReadFile(storeHostPath)
+	current, err := containerfs.ReadRegularFile(storeHostPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return "", nil

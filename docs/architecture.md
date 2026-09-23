@@ -154,6 +154,7 @@ Some managed Kubernetes nodes don't have NRI enabled in their containerd configu
 - **Opt-in only**: Containers are never modified unless the pod has `cainjekt.natron.io/enabled: "true"`
 - **Atomic writes**: All file operations use temp file + rename for crash safety
 - **Symlink protection**: Refuses to overwrite symlinks in trust stores (prevents symlink attacks)
+- **Regular files only**: The hook runs as root on the node, outside the container's device cgroup, so it reads image files (trust stores, `os-release`, `cacerts`) only if they are regular files of at most 16 MiB. A FIFO or device node placed by the image is refused rather than read
 - **Fail-open**: Hook and wrapper failures never block container startup
 - **Per-container isolation**: Each container gets its own staged CA file; containers can't interfere with each other
 - **No network calls**: The plugin operates entirely on local filesystem; no external communication
