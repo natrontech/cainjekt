@@ -110,6 +110,22 @@ affinity: {}
 ## @param priorityClassName Priority class name
 priorityClassName: system-node-critical
 
+## @param securityContext Security context of the plugin container
+## The plugin only needs root (uid 0) to reach the NRI socket and write
+## /run/cainjekt; the OCI hook is run by the container runtime on the host, not
+## in this pod, so it needs no capabilities. If the node's SELinux policy blocks
+## hostPath access for unprivileged pods (e.g. RHEL/OpenShift), set
+## `securityContext: {privileged: true}`.
+securityContext:
+  runAsUser: 0
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault
+
 resources:
   ## @param resources.requests.cpu CPU request
   ## @param resources.requests.memory Memory request
