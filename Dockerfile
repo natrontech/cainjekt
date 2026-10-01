@@ -22,7 +22,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
     go build -ldflags="-s -w" -trimpath -o cainjekt ./cmd/cainjekt
 
 # Installer image with shell for initContainer
-FROM debian:13-slim@sha256:d7e12182ce18b85b93007c1dedf31f2d29e01ccf3182cc4017c709b6259bc132 AS installer
+FROM debian:13-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a AS installer
 
 # Copy the binary from builder
 COPY --from=builder /workspace/cainjekt /cainjekt
@@ -33,7 +33,7 @@ RUN echo '#!/bin/sh\ncp /cainjekt "$1"\nchmod +x "$1"' > /install.sh && \
 
 # Use distroless base image for minimal attack surface
 # Note: Using root variant because the NRI plugin needs root access to connect to containerd's NRI socket
-FROM gcr.io/distroless/static-debian13:latest@sha256:f2ea2709ac8db56323cbd7d014277f32cb572d9ea124b0076f7aafe5980678fe
+FROM gcr.io/distroless/static-debian13:latest@sha256:58133991db06659feaabe0f4e97a35cebf15ef4ea08f8a4c6d2ee5f75e4aa6a0
 
 # Copy the binary from builder
 COPY --from=builder /workspace/cainjekt /cainjekt
