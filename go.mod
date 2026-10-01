@@ -3,10 +3,10 @@ module github.com/natrontech/cainjekt
 go 1.26
 
 require (
-	github.com/containerd/nri v0.12.2
+	github.com/containerd/nri v0.12.3
 	github.com/opencontainers/runtime-spec v1.3.0
 	github.com/prometheus/client_golang v1.24.1
-	github.com/prometheus/client_model v0.6.2
+	github.com/prometheus/client_model v0.6.3
 	software.sslmate.com/src/go-pkcs12 v0.7.3
 )
 
