@@ -14,9 +14,6 @@ metadata:
     app: cainjekt
 rules:
 - apiGroups: [""]
-  resources: ["nodes"]
-  verbs: ["get", "list"]
-- apiGroups: [""]
   resources: ["namespaces"]
   verbs: ["get"]
 ---
