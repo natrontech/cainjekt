@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	hookapi "github.com/natrontech/cainjekt/internal/engine/api"
+	"github.com/natrontech/cainjekt/internal/util/containerfs"
 	"github.com/natrontech/cainjekt/internal/util/envutil"
 	"github.com/natrontech/cainjekt/pkg/fsx"
 	"github.com/natrontech/cainjekt/pkg/javakeystore"
@@ -150,7 +151,7 @@ func (p *processor) ApplyWrapper(ctx *hookapi.Context) error {
 // mergeStore returns the re-encoded trust store with the missing certificates
 // added, or nil when they are all trusted already.
 func mergeStore(hostPath string, add []*x509.Certificate) ([]byte, javakeystore.Format, error) {
-	data, err := os.ReadFile(hostPath)
+	data, err := containerfs.ReadRegularFile(hostPath)
 	if err != nil {
 		return nil, javakeystore.FormatUnknown, fmt.Errorf("failed to read trust store: %w", err)
 	}
