@@ -186,6 +186,7 @@ metadata:
 
 Language-specific processors currently include:
 
+- `lang-dotnet`: sets `SSL_CERT_FILE`
 - `lang-nodejs`: sets `NODE_EXTRA_CA_CERTS`
 - `lang-python`: sets `SSL_CERT_FILE` and `REQUESTS_CA_BUNDLE`
 
