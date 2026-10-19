@@ -124,7 +124,7 @@ Available processors:
 `os-debian`, `os-rhel`, `os-opensuse`, `os-alpine`, `os-arch`, `os-fallback`
 
 **Language** (set environment variables):
-`lang-go`, `lang-java`, `lang-nodejs`, `lang-python`, `lang-ruby`
+`lang-dotnet`, `lang-go`, `lang-java`, `lang-nodejs`, `lang-python`, `lang-ruby`
 
 ## Verifying Injection
 
@@ -304,6 +304,7 @@ wrapper prepended to the entrypoint if injection happened).
 | Node.js apps | Yes | `NODE_EXTRA_CA_CERTS` |
 | Python apps | Yes | `SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE` |
 | Ruby apps | Yes | `SSL_CERT_FILE` |
+| .NET apps | Yes | OS trust store; `SSL_CERT_FILE` on read-only rootfs |
 | Go apps | Yes | `SSL_CERT_FILE` + OS trust store |
 | Static Go binaries | Partial | OS trust store works if paths exist; `SSL_CERT_FILE` requires Go binary in image |
 | Distroless images | Partial | Language env vars work; OS trust store may not |
