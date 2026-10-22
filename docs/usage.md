@@ -294,6 +294,15 @@ shell or `cat`; for those, inspect the container on the node instead
 (`crictl inspect <id> | jq '.info.runtimeSpec.process.args'` shows the cainjekt
 wrapper prepended to the entrypoint if injection happened).
 
+### Plugin gets "permission denied" on the NRI socket or /run/cainjekt
+
+The plugin runs as root with all capabilities dropped and without `privileged`. On nodes whose SELinux policy denies hostPath access to unprivileged pods (e.g. RHEL/OpenShift), fall back to a privileged container:
+
+```bash
+helm upgrade cainjekt charts/cainjekt -n kube-system --reuse-values \
+  --set-json 'securityContext={"privileged":true}'
+```
+
 ## Limitations
 
 | Scenario | Works? | Details |

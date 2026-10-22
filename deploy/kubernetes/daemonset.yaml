@@ -45,8 +45,16 @@ spec:
       - name: cainjekt
         image: cainjekt:latest
         imagePullPolicy: IfNotPresent
+        # Root for the NRI socket and /run/cainjekt; no capabilities needed.
+        # Use `privileged: true` instead if SELinux blocks hostPath access.
         securityContext:
-          privileged: true
+          runAsUser: 0
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+          seccompProfile:
+            type: RuntimeDefault
         env:
         - name: CAINJEKT_CA_FILE
           value: /etc/cainjekt/ca-bundle.pem
@@ -75,10 +83,6 @@ spec:
         - name: plugin-install-dir
           mountPath: /opt/cainjekt
           readOnly: true
-        - name: host-root
-          mountPath: /host
-          readOnly: true
-          mountPropagation: HostToContainer
         resources:
           requests:
             cpu: 10m
@@ -103,7 +107,3 @@ spec:
         hostPath:
           path: /opt/cainjekt
           type: DirectoryOrCreate
-      - name: host-root
-        hostPath:
-          path: /
-          type: Directory

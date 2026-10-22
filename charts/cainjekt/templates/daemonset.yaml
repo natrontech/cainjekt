@@ -72,8 +72,10 @@ spec:
         - name: cainjekt
           image: "{{ .Values.image.repository }}:{{ include "cainjekt.imageTag" . }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.securityContext }}
           securityContext:
-            privileged: true
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           env:
             - name: CAINJEKT_CA_FILE
               value: /etc/cainjekt/ca-bundle.pem
@@ -124,10 +126,6 @@ spec:
             - name: plugin-install-dir
               mountPath: /opt/cainjekt
               readOnly: true
-            - name: host-root
-              mountPath: /host
-              readOnly: true
-              mountPropagation: HostToContainer
           {{- with .Values.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
@@ -152,7 +150,3 @@ spec:
           hostPath:
             path: /opt/cainjekt
             type: DirectoryOrCreate
-        - name: host-root
-          hostPath:
-            path: /
-            type: Directory
