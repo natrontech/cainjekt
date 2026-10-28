@@ -55,6 +55,9 @@ Annotation prefix is configurable via `CAINJEKT_ANNOTATION_PREFIX`. Hook timeout
 
 ## Security
 
+The threat model and its invariants are in `docs/architecture.md` ("Threat Model"). Review changes against it, not ad hoc.
+
+- Container rootfs is untrusted: all hook-phase access goes through `containerfs` (lint-enforced)
 - Atomic writes with symlink protection for all CA file operations
 - Refuse to overwrite symlinks in trust stores
 - Preserve file ownership when modifying existing files

@@ -9,6 +9,7 @@ linters:
   enable:
     - dupl
     - errcheck
+    - forbidigo
     - copyloopvar
     - goconst
     - gocyclo
@@ -24,11 +25,25 @@ linters:
     - unparam
     - unused
   settings:
+    forbidigo:
+      # Hook-phase code works on an untrusted container rootfs. It must go
+      # through containerfs (container paths, confined to the rootfs) or
+      # hookapi.Context.ReadCABundle/StageFile (plugin-owned host paths).
+      # See "Threat Model" in docs/architecture.md.
+      forbid:
+        - pattern: ^(os\.(ReadFile|Open|OpenFile|OpenRoot|Create|CreateTemp|WriteFile|Stat|Lstat|Mkdir|MkdirAll|Remove|RemoveAll|Rename|Readlink|Symlink|Link|Chmod|Chown|Lchown|Truncate|ReadDir)|filepath\.(Glob|Walk|WalkDir|EvalSymlinks)|fsx\.AtomicWrite)$
+          msg: container rootfs is untrusted; use containerfs or hookapi.Context.ReadCABundle/StageFile
     revive:
       rules:
         - name: comment-spacings
   exclusions:
     rules:
+      - path-except: ^internal/(engine/processors|runtime/(hook|hookctx))/
+        linters:
+          - forbidigo
+      - path: _test\.go$
+        linters:
+          - forbidigo
       - path: "internal/*"
         linters:
           - dupl

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	hookapi "github.com/natrontech/cainjekt/internal/engine/api"
+	"github.com/natrontech/cainjekt/internal/util/containerfs"
 )
 
 func TestParseOSRelease(t *testing.T) {
@@ -148,15 +149,12 @@ func TestResolveContainerPathAbsoluteSymlink(t *testing.T) {
 	mustMkdirAll(t, filepath.Join(rootfs, "etc"))
 	mustSymlink(t, "/real/ssl/ca-bundle.pem", filepath.Join(rootfs, "etc", "ssl-bundle.pem"))
 
-	host, container, err := resolveContainerPath(rootfs, "/etc/ssl-bundle.pem")
+	container, err := containerfs.ResolveSymlinks(rootfs, "/etc/ssl-bundle.pem")
 	if err != nil {
-		t.Fatalf("resolveContainerPath() error = %v", err)
+		t.Fatalf("ResolveSymlinks() error = %v", err)
 	}
 	if container != "/real/ssl/ca-bundle.pem" {
 		t.Fatalf("container path mismatch: got=%q want=%q", container, "/real/ssl/ca-bundle.pem")
-	}
-	if host != filepath.Join(rootfs, "real", "ssl", "ca-bundle.pem") {
-		t.Fatalf("host path mismatch: got=%q", host)
 	}
 }
 
@@ -168,15 +166,12 @@ func TestResolveContainerPathRelativeDirSymlink(t *testing.T) {
 	mustMkdirAll(t, filepath.Join(rootfs, "usr", "lib"))
 	mustSymlink(t, "../usr/lib", filepath.Join(rootfs, "etc", "ssl"))
 
-	host, container, err := resolveContainerPath(rootfs, "/etc/ssl/ca-certificates.crt")
+	container, err := containerfs.ResolveSymlinks(rootfs, "/etc/ssl/ca-certificates.crt")
 	if err != nil {
-		t.Fatalf("resolveContainerPath() error = %v", err)
+		t.Fatalf("ResolveSymlinks() error = %v", err)
 	}
 	if container != "/usr/lib/ca-certificates.crt" {
 		t.Fatalf("container path mismatch: got=%q want=%q", container, "/usr/lib/ca-certificates.crt")
-	}
-	if host != filepath.Join(rootfs, "usr", "lib", "ca-certificates.crt") {
-		t.Fatalf("host path mismatch: got=%q", host)
 	}
 }
 

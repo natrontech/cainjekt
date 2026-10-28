@@ -70,5 +70,6 @@ Run `go mod tidy` after adding or removing dependencies. Keep dependency count l
 - **Context**: pass `*hookapi.Context` through processor pipeline, not `context.Context` (this is OCI hook level, not HTTP)
 - **Processor interface**: `Detect(*Context) DetectResult` + `Apply(*Context) error`
 - **Registry pattern**: global init-time registration, runtime lookup by name
-- **Atomic file writes**: always use `fsx.AtomicWrite` with symlink protection for CA files
+- **Container rootfs access**: hook-phase code (processors, hook, hookctx) touches the rootfs only through `containerfs` (`ReadFile`, `WriteFile`, `RegularFile`, `Glob`, `Writable`) with container paths, and the host staging dir only through `Context.ReadCABundle` / `Context.StageFile`. `forbidigo` enforces this; see "Threat Model" in `docs/architecture.md`
+- **Atomic file writes**: always use `fsx.AtomicWrite` with symlink protection for CA files (`containerfs.WriteFile` does this)
 - **Fail-open by default**: hook failures must not block container startup

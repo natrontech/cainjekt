@@ -3,7 +3,9 @@ package containerfs
 import (
 	"errors"
 	"os"
+	"path"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"testing"
 )
@@ -169,4 +171,34 @@ func TestReadRegularFileRejectsOversized(t *testing.T) {
 	if _, err := ReadRegularFile(p); err == nil {
 		t.Fatal("expected error for file larger than MaxReadSize")
 	}
+}
+
+// FuzzResolveSymlinks pins that resolution never leaves the rootfs, whatever
+// link target the image uses. Run with: go test -fuzz FuzzResolveSymlinks ./internal/util/containerfs/
+func FuzzResolveSymlinks(f *testing.F) {
+	for _, target := range []string{"/", "..", "../../..", "/etc/../../x", "a/../../b", "/proc/self/root", "l", "//x//y/..", "/a/l"} {
+		f.Add(target, "/a/l/x")
+	}
+	f.Fuzz(func(t *testing.T, target, query string) {
+		if target == "" || strings.ContainsRune(target, 0) {
+			t.Skip()
+		}
+		rootfs := t.TempDir()
+		if err := os.Mkdir(filepath.Join(rootfs, "a"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(target, filepath.Join(rootfs, "a", "l")); err != nil {
+			t.Skip()
+		}
+		got, err := ResolveSymlinks(rootfs, query)
+		if err != nil {
+			return
+		}
+		if !path.IsAbs(got) || path.Clean(got) != got {
+			t.Fatalf("resolved path %q is not clean and absolute", got)
+		}
+		if host := PathInRootfs(rootfs, got); host != rootfs && !strings.HasPrefix(host, rootfs+string(filepath.Separator)) {
+			t.Fatalf("target %q, query %q resolved outside the rootfs: %s", target, query, host)
+		}
+	})
 }

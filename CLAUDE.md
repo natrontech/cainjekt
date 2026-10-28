@@ -53,6 +53,8 @@ make copy-plugin              # Copy binary to kind node
 - `processors/osstore/`: OS CA store processors (debian, rhel, alpine, arch, opensuse, fallback) — priority 275-300. Detects read-only rootfs and skips gracefully.
 - `processors/dotnet/`, `processors/golang/`, `processors/java/`, `processors/nodejs/`, `processors/python/`, `processors/ruby/`: Language processors — priority 100. `java` is the odd one out: it rewrites the image's `cacerts` keystore (`pkg/javakeystore`) instead of setting an env var, because the JVM cannot read a PEM bundle.
 
+**Trust boundary**: the hook runs as root on the host against an image-controlled rootfs. All hook-phase file access goes through `internal/util/containerfs` (container paths, confined to the rootfs, regular files only) or `Context.StageFile` (host staging dir); `forbidigo` in `.golangci.yml` blocks raw `os` file calls there. `TestHostileRootfs` runs every registered processor against a malicious rootfs. See "Threat Model" in `docs/architecture.md`.
+
 **Key flow**: NRI intercepts container creation → stages CA file in `/run/cainjekt/containers/{id}/` → OCI hook detects OS and patches trust stores → wrapper sets env vars and execs original entrypoint.
 
 **Opt-in**: Pod annotation `cainjekt.natron.io/enabled: "true"` or pod/namespace label with same key. Configurable prefix via `CAINJEKT_ANNOTATION_PREFIX`. Filter processors via `cainjekt.natron.io/processors.include` / `cainjekt.natron.io/processors.exclude`.

@@ -17,7 +17,7 @@ func breadcrumb(name, content string) {
 	if dir == "" {
 		return
 	}
-	_ = os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600)
+	_ = os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600) //nolint:forbidigo // host staging dir set by the plugin, not the rootfs
 }
 
 func breadcrumbNow(name string) {
