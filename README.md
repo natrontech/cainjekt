@@ -69,11 +69,13 @@ annotations:
 
 cainjekt runs as a DaemonSet on every node. When a container with the opt-in annotation starts:
 
-1. **NRI Plugin** intercepts container creation, stages a per-container CA file, and injects an OCI hook + wrapper binary
-2. **OCI Hook** runs before the container starts — detects the OS distro and merges the CA into system trust stores (e.g. `/etc/ssl/certs/ca-certificates.crt`)
+1. **NRI Plugin** intercepts container creation, stages a per-container CA file, and injects an OCI hook + wrapper binary. It also bind-mounts the staged CA dir read-only at `/etc/cainjekt-ca` and sets the trust environment variables (`SSL_CERT_FILE`, `REQUESTS_CA_BUNDLE`, `NODE_EXTRA_CA_CERTS`, …) on the **container spec**
+2. **OCI Hook** runs before the container starts — detects the OS distro and merges the CA into system trust stores (e.g. `/etc/ssl/certs/ca-certificates.crt`), and refines the bundle under `/etc/cainjekt-ca`
 3. **Wrapper** runs as the container entrypoint — sets language-specific environment variables and then `exec`s the original command
 
-This three-stage pipeline ensures both OS-level and language-level trust stores are updated transparently.
+This pipeline ensures both OS-level and language-level trust stores are updated transparently.
+
+The env vars are set in *two* places on purpose. The wrapper only ever sets them on the entrypoint process, and a process started with `kubectl exec` does not inherit that environment — it is seeded from the container spec. Since every step of a GitHub Actions container job runs as an exec, spec-level env is what makes CA injection work there. `/etc/cainjekt-ca/ca-bundle-merged.pem` is seeded with public roots before the container starts, so a hook failure degrades to "org CA missing" rather than breaking public TLS.
 
 ## Container Images
 
