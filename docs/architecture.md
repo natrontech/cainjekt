@@ -151,6 +151,10 @@ The DaemonSet runs with `privileged: true`. This is required because:
 
 Some managed Kubernetes nodes don't have NRI enabled in their containerd configuration — for example, AKS GPU nodes use a custom containerd config for the NVIDIA runtime that may not include the NRI plugin. When the NRI socket (`/var/run/nri/nri.sock`) is not available, the plugin exits with a clear error message. The DaemonSet will crash-loop on that node, which is intentional — CrashLoopBackOff is the most visible signal to platform teams and existing monitoring will catch it. The fix is to either enable NRI on the node or exclude it via `nodeSelector`/`affinity`.
 
+When the connection to containerd drops (containerd restart, RKE2 upgrade), the plugin reconnects in-process with a backoff of 100 ms to 2 s and is not Ready while disconnected. It exits only after 2 minutes without a connection, so a node without NRI still ends up in CrashLoopBackOff.
+
+The plugin reaches the API server through `KUBERNETES_SERVICE_HOST`/`KUBERNETES_SERVICE_PORT`, not cluster DNS, so namespace-label opt-in also works with `hostNetwork: true`.
+
 ### Safety Guarantees
 
 - **Opt-in only**: Containers are never modified unless the pod has `cainjekt.natron.io/enabled: "true"`
