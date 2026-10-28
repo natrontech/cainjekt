@@ -110,12 +110,19 @@ affinity: {}
 ## @param priorityClassName Priority class name
 priorityClassName: system-node-critical
 
+## @param podSecurityContext Security context of the pod (plugin and installer)
+## On SELinux-enforcing nodes (RKE2 with `selinux: true`, SLE Micro, RHEL) the
+## default container_t domain may not connect to the NRI socket or write
+## /run/cainjekt and /opt/cainjekt, which carry host labels. spc_t lifts only the
+## SELinux confinement; capabilities stay dropped. Nodes without SELinux ignore it.
+podSecurityContext:
+  seLinuxOptions:
+    type: spc_t
+
 ## @param securityContext Security context of the plugin container
 ## The plugin only needs root (uid 0) to reach the NRI socket and write
 ## /run/cainjekt; the OCI hook is run by the container runtime on the host, not
-## in this pod, so it needs no capabilities. If the node's SELinux policy blocks
-## hostPath access for unprivileged pods (e.g. RHEL/OpenShift), set
-## `securityContext: {privileged: true}`.
+## in this pod, so it needs no capabilities.
 securityContext:
   runAsUser: 0
   allowPrivilegeEscalation: false

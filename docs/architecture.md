@@ -144,7 +144,7 @@ The plugin container runs as root (uid 0) but is **not privileged**: all capabil
 
 The part that modifies container filesystems — the OCI hook — is not run in this pod. containerd runs it on the host as root, as it does all OCI hooks, so the pod needs no capabilities and no access to the host root filesystem. The plugin does not call the Kubernetes nodes API; RBAC grants only `get` on namespaces (for the namespace-label opt-in).
 
-On nodes whose SELinux policy blocks hostPath access for unprivileged pods (e.g. RHEL/OpenShift), set `securityContext: {privileged: true}` in the Helm values.
+The pod runs in the SELinux type `spc_t`. Under SELinux enforcing (RKE2 with `selinux: true`, SLE Micro, RHEL), the default `container_t` may not connect to the NRI socket or write `/run/cainjekt` and `/opt/cainjekt`, which carry host labels. `spc_t` lifts only the SELinux confinement; capabilities stay dropped. Nodes without SELinux ignore it. If a node still denies access, set `securityContext: {privileged: true}` in the Helm values.
 
 `hostNetwork` and `hostPID` are **not required** — the plugin communicates via Unix socket (hostPath volume), not the network. They are disabled by default in the Helm chart but can be enabled if needed.
 

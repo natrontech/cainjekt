@@ -296,7 +296,7 @@ wrapper prepended to the entrypoint if injection happened).
 
 ### Plugin gets "permission denied" on the NRI socket or /run/cainjekt
 
-The plugin runs as root with all capabilities dropped and without `privileged`. On nodes whose SELinux policy denies hostPath access to unprivileged pods (e.g. RHEL/OpenShift), fall back to a privileged container:
+The plugin runs as root with all capabilities dropped and without `privileged`. The pod runs in the SELinux type `spc_t` (`podSecurityContext`), so SELinux-enforcing nodes don't block the NRI socket or the hostPaths. If the plugin still gets "permission denied" (check `ausearch -m avc` on the node), fall back to a privileged container:
 
 ```bash
 helm upgrade cainjekt charts/cainjekt -n kube-system --reuse-values \

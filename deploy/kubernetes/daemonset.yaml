@@ -19,6 +19,9 @@ spec:
         app: cainjekt
     spec:
       serviceAccountName: cainjekt
+      securityContext:
+        seLinuxOptions:
+          type: spc_t # SELinux-enforcing nodes: NRI socket and hostPaths carry host labels
       priorityClassName: system-node-critical
       tolerations:
       - operator: Exists
