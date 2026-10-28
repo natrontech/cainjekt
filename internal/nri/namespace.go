@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -74,7 +75,7 @@ func newNSLabelCache(log *slog.Logger, metrics *Metrics) *nsLabelCache {
 	cache := &nsLabelCache{
 		entries:   map[string]nsEntry{},
 		ttl:       1 * time.Minute,
-		apiURL:    "https://kubernetes.default.svc/api/v1/namespaces/",
+		apiURL:    apiServerURL() + "/api/v1/namespaces/",
 		tokenPath: defaultTokenPath,
 		tokenTTL:  30 * time.Second,
 		log:       log,
@@ -106,6 +107,17 @@ func newNSLabelCache(log *slog.Logger, metrics *Metrics) *nsLabelCache {
 		Transport: &http.Transport{TLSClientConfig: tlsCfg},
 	}
 	return cache
+}
+
+// apiServerURL returns the API server address the kubelet injects into every pod.
+// It avoids DNS, so lookups keep working with hostNetwork (where cluster DNS names
+// don't resolve) and on a fresh node before CoreDNS is reachable.
+func apiServerURL() string {
+	host, port := os.Getenv("KUBERNETES_SERVICE_HOST"), os.Getenv("KUBERNETES_SERVICE_PORT")
+	if host == "" || port == "" {
+		return "https://kubernetes.default.svc"
+	}
+	return "https://" + net.JoinHostPort(host, port)
 }
 
 // currentToken returns the service account token, re-reading it from disk when the

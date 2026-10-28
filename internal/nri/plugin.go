@@ -58,7 +58,8 @@ func Run(log *slog.Logger, args []string) error {
 	nsCache := newNSLabelCache(log, metrics)
 	p := &Plugin{log: log, metrics: metrics, nsCache: nsCache, stopCh: make(chan struct{})}
 
-	opts := []stub.Option{stub.WithOnClose(p.onClose)}
+	// No WithOnClose: a lost connection makes stub.Run return, and runNRI reconnects.
+	var opts []stub.Option
 	if pluginName != "" {
 		opts = append(opts, stub.WithPluginName(pluginName))
 	}
@@ -99,7 +100,7 @@ func Run(log *slog.Logger, args []string) error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- p.stub.Run(ctx)
+		errCh <- p.runNRI(ctx)
 	}()
 
 	select {
@@ -383,10 +384,42 @@ func (p *Plugin) RemoveContainer(ctx context.Context, pod *api.PodSandbox, ctr *
 	return nil
 }
 
-func (p *Plugin) onClose() {
-	p.ready.Store(false)
-	p.log.Info("connection to runtime lost")
-	os.Exit(1)
+// NRI reconnect backoff. containerd restarts (RKE2 upgrades, config changes) drop
+// the connection; reconnecting in-process instead of exiting avoids the kubelet's
+// CrashLoopBackOff, so containers created right after containerd comes back are
+// still injected. After nriGiveUp without a working connection we exit and let the
+// kubelet restart the pod, in case the stub itself is wedged.
+const (
+	nriBackoffMin = 100 * time.Millisecond
+	nriBackoffMax = 2 * time.Second
+	nriGiveUp     = 2 * time.Minute
+)
+
+// runNRI keeps the plugin connected to the runtime until ctx is cancelled.
+func (p *Plugin) runNRI(ctx context.Context) error {
+	backoff := nriBackoffMin
+	var failingSince time.Time
+	for {
+		err := p.stub.Run(ctx)
+		wasReady := p.ready.Swap(false)
+		if ctx.Err() != nil {
+			return nil
+		}
+		if wasReady || failingSince.IsZero() {
+			failingSince = time.Now()
+			backoff = nriBackoffMin
+		}
+		if time.Since(failingSince) > nriGiveUp {
+			return fmt.Errorf("no runtime connection for %s: %w", nriGiveUp, err)
+		}
+		p.log.Warn("connection to runtime lost, reconnecting", "error", err, "retry_in", backoff)
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(backoff):
+		}
+		backoff = min(backoff*2, nriBackoffMax)
+	}
 }
 
 // Synchronize is invoked by the NRI stub once the runtime has finished handshaking

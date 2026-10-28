@@ -114,3 +114,15 @@ func TestNSLabelCacheTokenTTL(t *testing.T) {
 		t.Fatalf("expected refreshed token after TTL, got %q", got)
 	}
 }
+
+func TestAPIServerURL(t *testing.T) {
+	t.Setenv("KUBERNETES_SERVICE_HOST", "fd00::1")
+	t.Setenv("KUBERNETES_SERVICE_PORT", "443")
+	if got, want := apiServerURL(), "https://[fd00::1]:443"; got != want {
+		t.Fatalf("apiServerURL() = %q, want %q", got, want)
+	}
+	t.Setenv("KUBERNETES_SERVICE_HOST", "")
+	if got, want := apiServerURL(), "https://kubernetes.default.svc"; got != want {
+		t.Fatalf("apiServerURL() = %q, want %q", got, want)
+	}
+}
