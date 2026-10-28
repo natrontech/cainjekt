@@ -4,11 +4,60 @@ package containerfs
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
+
+// MaxReadSize caps reads of files that come from a container image. Real trust
+// stores are well under 1 MiB; the cap only stops an image from making the hook
+// read without bound.
+const MaxReadSize = 16 << 20
+
+// ReadRegularFile reads a file inside a container rootfs from the host. The
+// hook runs as root outside the container's device cgroup, so the image must
+// not be able to point it at a FIFO (blocks until the hook is killed) or a
+// device node (reads node devices, and the bytes may be written back into the
+// container). hostPath must already be resolved with ResolveSymlinks.
+//
+// A missing file returns an error wrapping os.ErrNotExist.
+func ReadRegularFile(hostPath string) ([]byte, error) {
+	// Lstat first so a device node is never opened: opening some devices has
+	// side effects of its own.
+	fi, err := os.Lstat(hostPath)
+	if err != nil {
+		return nil, err
+	}
+	if !fi.Mode().IsRegular() {
+		return nil, fmt.Errorf("refusing to read %s: not a regular file (%s)", hostPath, fi.Mode().Type())
+	}
+
+	f, err := os.OpenFile(hostPath, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK|syscall.O_NOCTTY, 0)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	// Re-check on the open file in case the entry was swapped after Lstat.
+	if fi, err = f.Stat(); err != nil {
+		return nil, err
+	}
+	if !fi.Mode().IsRegular() {
+		return nil, fmt.Errorf("refusing to read %s: not a regular file (%s)", hostPath, fi.Mode().Type())
+	}
+
+	data, err := io.ReadAll(io.LimitReader(f, MaxReadSize+1))
+	if err != nil {
+		return nil, err
+	}
+	// Never truncate: a partial trust store written back would drop CAs.
+	if len(data) > MaxReadSize {
+		return nil, fmt.Errorf("refusing to read %s: larger than %d bytes", hostPath, MaxReadSize)
+	}
+	return data, nil
+}
 
 // PathInRootfs joins a container-absolute path onto the host rootfs mount.
 func PathInRootfs(rootfs, containerPath string) string {
