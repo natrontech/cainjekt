@@ -182,11 +182,14 @@ do not.
 
 ### Privileges
 
-The DaemonSet runs with `privileged: true`. This is required because:
+The plugin container runs as root (uid 0) but is **not privileged**: all capabilities are dropped, the root filesystem is read-only, privilege escalation is disabled and the default seccomp profile applies. Root is needed only because:
 
-- **NRI socket access**: The NRI socket at `/var/run/nri` is owned by containerd and requires root access
-- **Container rootfs access**: The hook modifies files inside the container's mounted rootfs, which lives under containerd's internal storage
-- **File ownership preservation**: When modifying trust stores, cainjekt preserves the original file ownership (uid/gid), which requires root
+- **NRI socket access**: The NRI socket at `/var/run/nri` is owned by root
+- **Per-container CA staging**: The plugin writes `/run/cainjekt/containers/<id>/` on the host, which is root-owned
+
+The part that modifies container filesystems — the OCI hook — is not run in this pod. containerd runs it on the host as root, as it does all OCI hooks, so the pod needs no capabilities and no access to the host root filesystem. The plugin does not call the Kubernetes nodes API; RBAC grants only `get` on namespaces (for the namespace-label opt-in).
+
+The pod runs in the SELinux type `spc_t`. Under SELinux enforcing (RKE2 with `selinux: true`, SLE Micro, RHEL), the default `container_t` may not connect to the NRI socket or write `/run/cainjekt` and `/opt/cainjekt`, which carry host labels. `spc_t` lifts only the SELinux confinement; capabilities stay dropped. Nodes without SELinux ignore it. If a node still denies access, set `securityContext: {privileged: true}` in the Helm values.
 
 `hostNetwork` and `hostPID` are **not required** — the plugin communicates via Unix socket (hostPath volume), not the network. They are disabled by default in the Helm chart but can be enabled if needed.
 
