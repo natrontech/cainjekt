@@ -33,7 +33,7 @@ RUN echo '#!/bin/sh\ncp /cainjekt "$1"\nchmod +x "$1"' > /install.sh && \
 
 # Use distroless base image for minimal attack surface
 # Note: Using root variant because the NRI plugin needs root access to connect to containerd's NRI socket
-FROM gcr.io/distroless/static-debian13:latest@sha256:58133991db06659feaabe0f4e97a35cebf15ef4ea08f8a4c6d2ee5f75e4aa6a0
+FROM gcr.io/distroless/static-debian13:latest@sha256:448810357cc8e67b7208988abdba0f5ec3d3aebee0a5b13eb624979792cffc0f
 
 # Copy the binary from builder
 COPY --from=builder /workspace/cainjekt /cainjekt
